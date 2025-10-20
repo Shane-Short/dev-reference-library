@@ -1,54 +1,12 @@
-If(
-    CountRows(colDeletePresets) = 0,
-    Notify("Select at least one preset to delete.", NotificationType.Information),
-    UpdateContext({
-        varPendingDeleteAction: "DeletePresets",
-        varConfirmDeleteMessage:
-            "You’re about to queue deletion for " &
-            CountRows(colDeletePresets) & " preset(s). This will remove user assignments and preset rows. Proceed?",
-        varShowConfirmDelete: true
-    })
-)
+// create → clear pattern so collections exist everywhere we reference them
+ClearCollect(colPresetUsersOriginal, Table({ Employee_Email:"", Employee:"" })); 
+Clear(colPresetUsersOriginal);
 
+ClearCollect(colPresetUsersWorking, Table({ Employee_Email:"", Employee:"" })); 
+Clear(colPresetUsersWorking);
 
-// === CASE: DeletePresets ===
-If(
-    varPendingDeleteAction = "DeletePresets",
-    With(
-        {
-            req:  Office365Users.UserProfileV2(User().Email),
-            code: "DelPre-" & Text(Now(), "yyyymmdd-hhnnss")
-        },
-        ForAll(
-            colDeletePresets As p,
-            Patch(
-                Skill_Matrix_Assignments,
-                Defaults(Skill_Matrix_Assignments),
-                {
-                    Title:          code,
-                    Operation:      { Value: "DeletePreset" }, // Choice
-                    Status:         { Value: "Pending" },      // Choice
-                    Team_Preset:    p.Preset_Name,
-                    Team_Preset_ID: p.Preset_ID,
-                    RequestedAt:    Now(),
-                    RequestedBy: {
-                        '@odata.type': "#Microsoft.Azure.Connectors.SharePoint.SPListExpandedUser",
-                        Claims: "i:0#.f|membership|" & Coalesce(req.mail, User().Email),
-                        DisplayName:   Coalesce(req.displayName, User().FullName),
-                        Email:         Coalesce(req.mail, User().Email),
-                        Department:    Coalesce(req.department, ""),
-                        JobTitle:      Coalesce(req.jobTitle, ""),
-                        Picture:       ""
-                    }
-                }
-            )
-        );
-        Notify(
-            "Queued " & CountRows(colDeletePresets) & " preset delete request(s).",
-            NotificationType.Success
-        );
-        Clear(colDeletePresets);
-        Reset(cmbDelPreset);
-        UpdateContext({ varShowConfirmDelete:false, varPendingDeleteAction:"", varConfirmDeleteMessage:"" })
-    )
-);
+ClearCollect(colAddedUsers, Table({ Employee_Email:"", Employee:"" })); 
+Clear(colAddedUsers);
+
+ClearCollect(colRemovedUsers, Table({ Employee_Email:"", Employee:"" })); 
+Clear(colRemovedUsers);
