@@ -1,15 +1,14 @@
 With(
     {
-        selEmail: Lower(cmbPeople.Selected.Mail),
-        selName:  Coalesce(
-            cmbPeople.Selected.DisplayName,
-            cmbPeople.Selected.GivenName & " " & cmbPeople.Selected.Surname
-        )
+        p: If(IsEmpty(cmbPeople.SelectedItems), Blank(), First(cmbPeople.SelectedItems)),
+        _email: Lower(Coalesce(p.Mail, p.UserPrincipalName)),
+        _name: Coalesce(p.DisplayName, "")
     },
     If(
-        !IsBlank(selEmail) &&
-        IsBlank(LookUp(colPresetUsersWorking, Lower(Employee_Email) = selEmail)),
-        Collect(colPresetUsersWorking, { Employee_Email: selEmail, Employee: selName })
+        !IsBlank(p) &&
+        !IsBlank(_email) &&
+        IsBlank(LookUp(colPresetUsersWorking, Lower(Employee_Email) = _email)),
+        Collect(colPresetUsersWorking, { Employee_Email: _email, Employee: _name })
     )
 );
 Reset(cmbPeople)
