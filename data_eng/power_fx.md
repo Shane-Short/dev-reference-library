@@ -1,39 +1,35 @@
 If(
-    CountRows(colDeleteCatItems) = 0,
-    Notify("Select at least one Category — Item to delete.", NotificationType.Information),
+    CountRows(colDeletePresets) = 0,
+    Notify("Select at least one preset to delete.", NotificationType.Information),
     UpdateContext({
-        varPendingDeleteAction: "DeleteCatItems",
+        varPendingDeleteAction: "DeletePresets",
         varConfirmDeleteMessage:
             "You’re about to queue deletion for " &
-            CountRows(colDeleteCatItems) & " CatItem(s). Proceed?",
+            CountRows(colDeletePresets) & " preset(s). This will remove user assignments and preset rows. Proceed?",
         varShowConfirmDelete: true
     })
 )
 
 
-
-
-// === CASE: DeleteCatItems ===
+// === CASE: DeletePresets ===
 If(
-    varPendingDeleteAction = "DeleteCatItems",
+    varPendingDeleteAction = "DeletePresets",
     With(
         {
-            req: Office365Users.UserProfileV2(User().Email),
-            code: "DelCI-" & Text(Now(), "yyyymmdd-hhnnss")
+            req:  Office365Users.UserProfileV2(User().Email),
+            code: "DelPre-" & Text(Now(), "yyyymmdd-hhnnss")
         },
         ForAll(
-            colDeleteCatItems As c,
+            colDeletePresets As p,
             Patch(
                 Skill_Matrix_Assignments,
                 Defaults(Skill_Matrix_Assignments),
                 {
                     Title:          code,
-                    Operation:      { Value: "DeleteCatItem" }, // Choice
-                    Status:         { Value: "Pending" },       // Choice
-                    CatItem_ID:     c.CatItem_ID,
-                    // optional: nice to read in the list
-                    Category:       c.Category,
-                    Item:           c.Item,
+                    Operation:      { Value: "DeletePreset" }, // Choice
+                    Status:         { Value: "Pending" },      // Choice
+                    Team_Preset:    p.Preset_Name,
+                    Team_Preset_ID: p.Preset_ID,
                     RequestedAt:    Now(),
                     RequestedBy: {
                         '@odata.type': "#Microsoft.Azure.Connectors.SharePoint.SPListExpandedUser",
@@ -48,11 +44,11 @@ If(
             )
         );
         Notify(
-            "Queued " & CountRows(colDeleteCatItems) & " CatItem delete request(s).",
+            "Queued " & CountRows(colDeletePresets) & " preset delete request(s).",
             NotificationType.Success
         );
-        Clear(colDeleteCatItems);
-        Reset(cmbDelCatItem);
+        Clear(colDeletePresets);
+        Reset(cmbDelPreset);
         UpdateContext({ varShowConfirmDelete:false, varPendingDeleteAction:"", varConfirmDeleteMessage:"" })
     )
 );
