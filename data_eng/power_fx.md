@@ -1,20 +1,39 @@
 If(
-    varPendingDeleteAction = "DeleteModules",
+    CountRows(colDeleteCatItems) = 0,
+    Notify("Select at least one Category — Item to delete.", NotificationType.Information),
+    UpdateContext({
+        varPendingDeleteAction: "DeleteCatItems",
+        varConfirmDeleteMessage:
+            "You’re about to queue deletion for " &
+            CountRows(colDeleteCatItems) & " CatItem(s). Proceed?",
+        varShowConfirmDelete: true
+    })
+)
+
+
+
+
+// === CASE: DeleteCatItems ===
+If(
+    varPendingDeleteAction = "DeleteCatItems",
     With(
         {
             req: Office365Users.UserProfileV2(User().Email),
-            code: "DelMod-" & Text(Now(), "yyyymmdd-hhnnss")
+            code: "DelCI-" & Text(Now(), "yyyymmdd-hhnnss")
         },
         ForAll(
-            colDeleteModules As m,
+            colDeleteCatItems As c,
             Patch(
                 Skill_Matrix_Assignments,
                 Defaults(Skill_Matrix_Assignments),
                 {
                     Title:          code,
-                    Operation:      { Value: "DeleteModule" },
-                    Status:         { Value: "Pending" },
-                    Module_Name:    m.Title,
+                    Operation:      { Value: "DeleteCatItem" }, // Choice
+                    Status:         { Value: "Pending" },       // Choice
+                    CatItem_ID:     c.CatItem_ID,
+                    // optional: nice to read in the list
+                    Category:       c.Category,
+                    Item:           c.Item,
                     RequestedAt:    Now(),
                     RequestedBy: {
                         '@odata.type': "#Microsoft.Azure.Connectors.SharePoint.SPListExpandedUser",
@@ -29,15 +48,11 @@ If(
             )
         );
         Notify(
-            "Queued " & CountRows(colDeleteModules) & " module delete request(s).",
+            "Queued " & CountRows(colDeleteCatItems) & " CatItem delete request(s).",
             NotificationType.Success
         );
-        Clear(colDeleteModules);
-        Reset(cmbDelModule);
-        UpdateContext({
-            varShowConfirmDelete: false,
-            varPendingDeleteAction: "",
-            varConfirmDeleteMessage: ""
-        })
+        Clear(colDeleteCatItems);
+        Reset(cmbDelCatItem);
+        UpdateContext({ varShowConfirmDelete:false, varPendingDeleteAction:"", varConfirmDeleteMessage:"" })
     )
 );
