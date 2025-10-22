@@ -1,15 +1,22 @@
-With(
-    {
-        result:
-            If(
-                !IsBlank(cmbDelUser.SearchText) && Len(cmbDelUser.SearchText) >= 3,
-                Office365Users.SearchUserV2({ searchTerm: cmbDelUser.SearchText, top: 50 }).value,
-                Table({ DisplayName: "", Mail: "", UserPrincipalName: "" })
+// Guard against placeholder/blank selection
+If(
+    IsBlank(cmbDelUser.Selected) ||
+    (IsBlank(cmbDelUser.Selected.Title) && IsBlank(cmbDelUser.Selected.Subtitle)),
+    Reset(cmbDelUser),
+    With(
+        {
+            // Subtitle is Mail or UPN from our Items AddColumns()
+            selEmail: Lower( Text( cmbDelUser.Selected.Subtitle ) ),
+            selName:  Text( cmbDelUser.Selected.Title )
+        },
+        If(
+            !IsBlank(selEmail) &&
+            IsBlank( LookUp(colDeleteUsers, Lower(Employee_Email) = selEmail) ),
+            Collect(
+                colDeleteUsers,
+                { Employee_Email: selEmail, Employee: selName }
             )
-    },
-    AddColumns(
-        result,
-        "Title",    Coalesce(DisplayName, ""),
-        "Subtitle", Coalesce(Mail, UserPrincipalName, "")
+        );
+        Reset(cmbDelUser)
     )
 )
