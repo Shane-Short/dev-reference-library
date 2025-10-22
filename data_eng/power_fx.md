@@ -1,20 +1,20 @@
-// Defensive add → stage into colDeleteUsers (dedupe by email)
-If(
-    IsBlank(cmbDelUser.Selected) ||
-    (IsBlank(cmbDelUser.Selected.DisplayName) &&
-     IsBlank(cmbDelUser.Selected.Mail) &&
-     IsBlank(cmbDelUser.Selected.UserPrincipalName)),
-    Reset(cmbDelUser),
-    With(
-        {
-            selEmail: Lower(Text(Coalesce(cmbDelUser.Selected.Mail, cmbDelUser.Selected.UserPrincipalName))),
-            selName:  Text(Coalesce(cmbDelUser.Selected.DisplayName, ""))
-        },
-        If(
-            !IsBlank(selEmail) &&
-            IsBlank(LookUp(colDeleteUsers, Lower(Employee_Email) = selEmail)),
-            Collect(colDeleteUsers, { Employee_Email: selEmail, Employee: selName })
-        );
-        Reset(cmbDelUser)
+With(
+    {
+        src:
+            If(
+                IsBlank(cmbDelUser.SearchText) || Len(cmbDelUser.SearchText) < 3,
+                // 0-row placeholder with the same column names the real data has
+                Filter(
+                    Table({ DisplayName:"", Mail:"", UserPrincipalName:"" }),
+                    false
+                ),
+                Office365Users.SearchUserV2({ searchTerm: cmbDelUser.SearchText, top: 50 }).value
+            )
+    },
+    // Create explicit text columns the Fields panel can bind to reliably
+    AddColumns(
+        src,
+        "Title",      Coalesce(DisplayName, ""),
+        "Subtitle",   Coalesce(Mail, UserPrincipalName, "")
     )
 )
