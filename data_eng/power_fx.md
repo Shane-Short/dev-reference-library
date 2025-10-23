@@ -1,91 +1,115 @@
-// 0) Normalize who we are
-Set(varMe, Lower(User().Email));
+// ---------- Who am I ----------
+Set(varMe, Lower(Trim(User().Email)));
 
-// 1) Start from all this user’s entries
+// ---------- My User_Settings rows ----------
 ClearCollect(
-    colUserEntries_All,
-    Filter(
-        Skill_Matrix_Entries,
-        Lower(Employee_Email) = varMe
-    )
+    colMySettings,
+    Filter(Skill_Matrix_User_Settings, Lower(Trim(Employee_Email)) = varMe)
 );
 
-// 2) Apply optional UI filters (preset/module/category) if you have them
-//    (if you don't have one of these filters, just remove that line)
-ClearCollect(
-    colUserEntries,
-    Filter(
-        colUserEntries_All,
-        // preset filter
-        If(IsBlank(cmbHomePreset.Selected.Preset_ID), true, Preset_ID = cmbHomePreset.Selected.Preset_ID),
-        // module filter
-        If(IsBlank(cmbHomeModule.Selected.Title), true, Module = cmbHomeModule.Selected.Title),
-        // category filter
-        If(IsBlank(cmbHomeCategory.Selected.Value), true, Category = cmbHomeCategory.Selected.Value)
-    )
-);
-
-// 3) Totals label can bind to CountRows(colUserEntries)
-
-
-ClearCollect(
-    colPie_LevelBreakdown,
-    ForAll(
-        Sequence(5),    // produces 1..5
-        With(
-            { lvl: Value },
-            {
-                Label: "Level " & Text(lvl),
-                Count: CountIf(colUserEntries, Value(Skill_Level) = lvl)
-            }
-        )
-    )
-);
-
-ClearCollect(
-    colPie_CategoryBreakdown,
-    With(
-        {
-            g:
-            AddColumns(
-                GroupBy(colUserEntries, "Category", "Rows"),
-                "Count", CountRows(Rows)
-            )
-        },
-        // take top 10 by volume; fold the rest into "Other" (optional)
-        If(
-            CountRows(g) <= 10,
-            g,
-            Collect(
-                ClearCollect(col__TopCats,
-                    FirstN(SortByColumns(g, "Count", Descending), 10)
-                ),
-                col__TopCats
-            );
-            Collect(
-                col__TopCats,
+// Guard: if no settings, keep collections empty and exit early
+If( CountRows(colMySettings) = 0,
+    Clear(colMyPresets); Clear(colMyModules); Clear(colPresetItems); Clear(colUserEntries); Clear(colUserEntriesNorm); Clear(colUserSelections);
+    Set(varPresetListText, "None assigned");
+    // early return pattern (no-op)
+    false,
+    
+    // ---------- All my presets (distinct) ----------
+    ClearCollect(
+        colMyPresets,
+        AddColumns(
+            // Distinct by Preset_ID, but keep the readable name
+            ForAll(
+                Distinct(colMySettings, Team_Preset_ID),
                 {
-                    Category: "Other",
-                    Rows:    Table({}),   // just to satisfy schema
-                    Count:   Sum(FirstN(SortByColumns(g, "Count", Descending), CountRows(g) - 10), Count)
+                    Preset_ID: ThisRecord.Value,
+                    Preset_Name: LookUp(colMySettings, Team_Preset_ID = ThisRecord.Value).Team_Preset
                 }
-            );
-            col__TopCats
+            ),
+            // tidy display text if you want
+            "Display", Preset_Name
+        )
+    );
+
+    // Text shown on the page: "Team Preset(s): A; B; C"
+    Set(
+        varPresetListText,
+        If(
+            CountRows(colMyPresets)=0,
+            "None assigned",
+            Concat( SortByColumns(colMyPresets, "Preset_Name", Ascending), Preset_Name, "; " )
+        )
+    );
+
+    // ---------- All modules across ALL my presets ----------
+    // Team_Presets is normalized: one row per preset + module
+    ClearCollect(
+        colMyModules,
+        AddColumns(
+            Distinct(
+                Filter(
+                    Skill_Matrix_Team_Presets,
+                    CountIf(colMyPresets, Preset_ID = Team_Preset_ID) > 0
+                ),
+                Modules
+            ),
+            "Title", ThisRecord.Value
+        )
+    );
+
+    // ---------- All reference rows for those modules ----------
+    // Use normalized compare to be resilient to casing/spaces
+    ClearCollect(
+        colPresetItems,
+        With(
+            {
+                mods: AddColumns(colMyModules, nTitle, Lower(Trim(Title)))
+            },
+            Filter(
+                Skill_Matrix_Reference As r,
+                CountIf(mods, nTitle = Lower(Trim(r.Module))) > 0
+            )
+        )
+    );
+
+    // ---------- My existing entries ----------
+    ClearCollect(
+        colUserEntries,
+        Filter(Skill_Matrix_Entries, Lower(Trim(Employee_Email)) = varMe)
+    );
+
+    // Normalized copy for robust matching
+    ClearCollect(
+        colUserEntriesNorm,
+        AddColumns(
+            colUserEntries,
+            nModule,   Lower(Trim(Module)),
+            nCategory, Lower(Trim(Category)),
+            nItem,     Lower(Trim(Item))
+        )
+    );
+
+    // ---------- Build the working set the UI uses ----------
+    // (one row per Module+Category+Item with the user's current Skill_Level)
+    ClearCollect(
+        colUserSelections,
+        AddColumns(
+            AddColumns(
+                colPresetItems,
+                nModule,   Lower(Trim(Module)),
+                nCategory, Lower(Trim(Category)),
+                nItem,     Lower(Trim(Item))
+            ),
+            Skill_Level,
+                Coalesce(
+                    LookUp(
+                        colUserEntriesNorm,
+                        nModule = Self.nModule && nCategory = Self.nCategory && nItem = Self.nItem,
+                        Skill_Level
+                    ),
+                    1   // default level when no entry exists
+                ),
+            HasChanged, false
         )
     )
 );
-
-
-ClearCollect(
-    colPie_TypeBreakdown,
-    With(
-        {
-            g: AddColumns(
-                GroupBy(colUserEntries, "Skill_Type", "Rows"),
-                "Count", CountRows(Rows)
-            )
-        },
-        g
-    )
-);
-// Bind to a 3rd pie: Items = colPie_TypeBreakdown (Labels=Skill_Type, Values=Count)
