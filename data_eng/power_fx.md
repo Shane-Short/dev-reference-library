@@ -1,42 +1,59 @@
-// 3a) Distinct presets for me (ID + Name with strong fallbacks)
-ClearCollect(
-    colMyPresets,
-    ForAll(
-        Distinct(colMySettings, Team_Preset_ID) As d,   // d.Result is the ID from User_Settings
-        With(
-            { pid: d.Result },
-            {
-                Preset_ID: pid,
-                // Try to get a readable name from User_Settings first, then Team_Presets.Title (or Preset_Name if you have it),
-                // finally fall back to the ID so we never return blank.
-                Preset_Name:
-                    Coalesce(
-                        LookUp(colMySettings, Team_Preset_ID = pid, Team_Preset),
-                        LookUp(Skill_Matrix_Team_Presets, Preset_ID = pid, Title),
-                        LookUp(Skill_Matrix_Team_Presets, Preset_ID = pid, Preset_Name),
-                        Text(pid)
-                    )
-            }
-        )
-    )
-);
-
-// 3b) Label text: "Preset A; Preset B; ..." (skip blanks just in case)
-Set(
-    varPresetListText,
+// Guard: nothing loaded
+If(
+    IsEmpty(colUserSelections),
+    Notify("Nothing to save yet.", NotificationType.Information),
+    
     With(
-        {
-            names:
-                SortByColumns(
-                    Filter(colMyPresets, !IsBlank(Preset_Name)),
-                    "Preset_Name",
-                    Ascending
-                )
-        },
+        { changed: Filter(colUserSelections, HasChanged = true) },
+        
+        // Guard: no changes
         If(
-            CountRows(names) = 0,
-            "None assigned",
-            Concat(names, Preset_Name, "; ")
+            CountRows(changed) = 0,
+            Notify("No changes to save.", NotificationType.Information),
+            
+            // Else: upsert each changed row
+            ForAll(
+                changed As row,
+                Patch(
+                    Skill_Matrix_Entries,
+                    LookUp(
+                        Skill_Matrix_Entries,
+                        Lower(Trim(Employee_Email)) = varMe &&
+                        Module = row.Module &&
+                        Category = row.Category &&
+                        Item = row.Item
+                    ),
+                    {
+                        Employee: Coalesce(Office365Users.MyProfileV2().displayName, User().FullName),
+                        Employee_Email: varMe,
+                        Module: row.Module,
+                        Category: row.Category,
+                        Item: row.Item,
+                        Skill_Level: Value(row.Skill_Level),
+                        Skill_Type: LookUp(
+                            Skill_Matrix_Reference,
+                            Module = row.Module && Category = row.Category && Item = row.Item,
+                            Skill_Type
+                        ),
+                        // --- OPTIONAL: uncomment if these columns exist in Skill_Matrix_Entries ---
+                        // Reference_ID: LookUp(
+                        //     Skill_Matrix_Reference,
+                        //     Module = row.Module && Category = row.Category && Item = row.Item,
+                        //     Reference_ID
+                        // ),
+                        // Mod_ID: LookUp(
+                        //     Skill_Matrix_Reference,
+                        //     Module = row.Module && Category = row.Category && Item = row.Item,
+                        //     Mod_ID
+                        // ),
+                        Timestamp: Now()
+                    }
+                )
+            );
+            
+            // Mark local rows as clean (don’t rebuild the whole collection)
+            UpdateIf(colUserSelections, HasChanged = true, { HasChanged: false });
+            Notify("Saved " & Text(CountRows(changed)) & " change(s).", NotificationType.Success)
         )
     )
-);
+)
