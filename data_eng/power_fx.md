@@ -1,4 +1,4 @@
-// ---------- 1) Who am I (robust) ----------
+// 1) Who am I (robust)
 Set(
     varMe,
     Lower(
@@ -11,19 +11,15 @@ Set(
     )
 );
 
-// Optional while stabilizing data:
-Refresh(Skill_Matrix_User_Settings);
-
-// ---------- 2) My settings rows ----------
+// 2) My settings rows
 ClearCollect(
     colMySettings,
     Filter(Skill_Matrix_User_Settings, Lower(Trim(Employee_Email)) = varMe)
 );
 
-// ---------- 3) If I have no settings, clear and exit ----------
+// 3) If I have no settings, clear and exit; else build state
 If(
     CountRows(colMySettings) = 0,
-    // Clear downstream collections and label
     Clear(colMyPresets);
     Clear(colMyModules);
     Clear(colPresetItems);
@@ -32,23 +28,22 @@ If(
     Clear(colUserSelections);
     Set(varPresetListText, "None assigned"),
     
-    // ---------- ELSE: build all state ----------
-    // 3a) Distinct presets for me (ID + Name)
+    // --- Distinct presets for me (ID + Name from Team_Preset) ---
     ClearCollect(
         colMyPresets,
         AddColumns(
             Distinct(colMySettings, Team_Preset_ID),
-            "Preset_ID", ThisRecord.Value,
+            "Preset_ID", ThisRecord.Result,
             "Preset_Name",
                 LookUp(
                     colMySettings,
-                    Team_Preset_ID = ThisRecord.Value,
-                    Coalesce(Team_Preset, Preset_Name, Title)
+                    Team_Preset_ID = ThisRecord.Result,
+                    Team_Preset
                 )
         )
     );
 
-    // 3b) Label text: "Preset A; Preset B; ..."
+    // --- Label text: "Preset A; Preset B; ..." ---
     Set(
         varPresetListText,
         If(
@@ -62,14 +57,14 @@ If(
         )
     );
 
-    // 3c) All modules across ALL my presets (Team_Presets is 1 row per Preset+Module)
+    // --- All modules across ALL my presets (Team_Presets: 1 row per Preset+Module) ---
     ClearCollect(
         colMyModules,
         AddColumns(
             Distinct(
                 Filter(
-                    Skill_Matrix_Team_Presets,
-                    CountIf(colMyPresets, Preset_ID = Team_Preset_ID) > 0
+                    Skill_Matrix_Team_Presets As tp,
+                    CountIf(colMyPresets, Preset_ID = tp.Preset_ID) > 0
                 ),
                 Modules
             ),
@@ -77,7 +72,7 @@ If(
         )
     );
 
-    // 3d) All reference rows (Module/Category/Item) for those modules
+    // --- All reference rows (Module/Category/Item) for those modules ---
     ClearCollect(
         colPresetItems,
         With(
@@ -89,13 +84,13 @@ If(
         )
     );
 
-    // 3e) My existing entries
+    // --- My existing entries ---
     ClearCollect(
         colUserEntries,
         Filter(Skill_Matrix_Entries, Lower(Trim(Employee_Email)) = varMe)
     );
 
-    // 3f) Normalized copy of my entries (for reliable matching)
+    // --- Normalized copy of my entries (for reliable matching) ---
     ClearCollect(
         colUserEntriesNorm,
         AddColumns(
@@ -106,11 +101,11 @@ If(
         )
     );
 
-    // 3g) Working set for the UI: every preset item + current Skill_Level (default 1)
+    // --- Working set for the UI: every preset item + current Skill_Level (default 1) ---
     ClearCollect(
         colUserSelections,
         AddColumns(
-            // first normalize keys on the reference rows
+            // normalize keys on the reference rows
             AddColumns(
                 colPresetItems,
                 "nModule",   Lower(Trim(Module)),
