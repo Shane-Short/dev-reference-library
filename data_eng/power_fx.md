@@ -1,4 +1,4 @@
-// source = what’s currently in view for the user
+// Build the source based on current filters (Module/Category)
 With(
     {
         src:
@@ -12,16 +12,10 @@ With(
                 )
             )
     },
-    // Build a small summary table: one row per distinct Skill_Level
+    // Always produce levels 1..5, then count matches in src
     AddColumns(
-        // make distinct Skill_Level values
-        RenameColumns(
-            Distinct(src, Skill_Level),
-            "Result", "Level"
-        ),
-        // Count how many rows at each level
-        "Value", CountIf(src, Skill_Level = Level),
-        // Text to show in legend/slices
-        "Category", "Level " & Text(Coalesce(Level, 1))
+        ForAll(Sequence(5), { Level: Value }),
+        "Qty", CountIf(src, Value(Coalesce(Skill_Level, 1)) = Level),
+        "Label", Text(Level)     // slice label should be just "1", "2", ...
     )
 )
