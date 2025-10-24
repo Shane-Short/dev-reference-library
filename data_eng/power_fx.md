@@ -1,86 +1,70 @@
-// Nothing loaded?
+// Guard: nothing loaded
 If(
     IsEmpty(colUserSelections),
     Notify("Nothing to save yet.", NotificationType.Information),
     
     With(
         { changed: Filter(colUserSelections, HasChanged = true) },
-        
-        // No pending changes?
+
+        // Guard: no changes
         If(
             CountRows(changed) = 0,
             Notify("No changes to save.", NotificationType.Information),
-            
-            // Try to upsert each changed row
+
+            // Upsert each changed row
             ForAll(
                 changed As row,
                 With(
                     {
-                        // Reference row for this Module/Category/Item (may be blank if missing)
-                        ref: LookUp(
-                                Skill_Matrix_Reference,
-                                Module = row.Module && Category = row.Category && Item = row.Item
-                             ),
-                        // Common fields we always send (match your SharePoint schema names)
-                        base:
-                            {
-                                // Many SharePoint lists require Title; give a deterministic one:
-                                Title: row.Module & " | " & row.Category & " | " & row.Item,
-
-                                Employee_Email: varMe,
-                                Module: row.Module,
-                                Category: row.Category,
-                                Item: row.Item,
-
-                                // Defaults if blank
-                                Skill_Level: Value(Coalesce(row.Skill_Level, 1)),
-                                Skill_Type: Coalesce(ref.Skill_Type, "Basic"),
-
-                                // You switched these to Single line of text → safe to write GUID strings
-                                Reference_ID: ref.Reference_ID,
-                                Mod_ID: ref.Mod_ID,
-
-                                Timestamp: Now()
-                            }
-                    },
-
-                    // First, attempt as if Employee is a PERSON column
-                    IfError(
-                        Patch(
-                            Skill_Matrix_Entries,
-                            LookUp(
-                                Skill_Matrix_Entries,
-                                Lower(Trim(Employee_Email)) = varMe &&
-                                Module   = row.Module &&
-                                Category = row.Category &&
-                                Item     = row.Item
-                            ),
-                            base & {
-                                Employee: {
-                                    '@odata.type': "#Microsoft.Azure.Connectors.SharePoint.SPListExpandedUser",
-                                    Claims: "i:0#.f|membership|" & varMe,
-                                    DisplayName: Coalesce(Office365Users.MyProfileV2().displayName, User().FullName),
-                                    Email: varMe,
-                                    Department: "",
-                                    JobTitle: "",
-                                    Picture: ""
-                                }
-                            }
+                        // Pull reference fields individually to avoid '.' on blank/error record
+                        refSkillType: LookUp(
+                            Skill_Matrix_Reference,
+                            Module = row.Module && Category = row.Category && Item = row.Item,
+                            Skill_Type
                         ),
-                        // If that fails (e.g., Employee is TEXT), try again with plain text
-                        Patch(
-                            Skill_Matrix_Entries,
-                            LookUp(
-                                Skill_Matrix_Entries,
-                                Lower(Trim(Employee_Email)) = varMe &&
-                                Module   = row.Module &&
-                                Category = row.Category &&
-                                Item     = row.Item
-                            ),
-                            base & {
-                                Employee: Coalesce(Office365Users.MyProfileV2().displayName, User().FullName)
-                            }
+                        refRefId: LookUp(
+                            Skill_Matrix_Reference,
+                            Module = row.Module && Category = row.Category && Item = row.Item,
+                            Reference_ID
+                        ),
+                        refModId: LookUp(
+                            Skill_Matrix_Reference,
+                            Module = row.Module && Category = row.Category && Item = row.Item,
+                            Mod_ID
                         )
+                    },
+                    Patch(
+                        Skill_Matrix_Entries,
+                        // Update existing row for this user+M/C/I, or create if not found
+                        LookUp(
+                            Skill_Matrix_Entries,
+                            Lower(Trim(Employee_Email)) = varMe &&
+                            Module   = row.Module &&
+                            Category = row.Category &&
+                            Item     = row.Item
+                        ),
+                        {
+                            // Many SharePoint lists have Title required
+                            Title: row.Module & " | " & row.Category & " | " & row.Item,
+
+                            // Text columns (per your schema)
+                            Employee:       User().FullName,
+                            Employee_Email: varMe,
+
+                            Module:   row.Module,
+                            Category: row.Category,
+                            Item:     row.Item,
+
+                            // Defaults if blank
+                            Skill_Level: Value(Coalesce(row.Skill_Level, 1)),
+                            Skill_Type:  Coalesce(refSkillType, "Basic"),
+
+                            // GUIDs stored as text in Entries (you changed these columns to text)
+                            Reference_ID: refRefId,
+                            Mod_ID:       refModId,
+
+                            Timestamp: Now()
+                        }
                     )
                 )
             );
@@ -88,9 +72,9 @@ If(
             // Mark local rows clean
             UpdateIf(colUserSelections, HasChanged = true, { HasChanged: false });
 
-            // Optional: inspect SharePoint write errors if anything still fails silently
+            // Optional: capture SharePoint write errors for debugging
             // ClearCollect(colEntryErrors, Errors(Skill_Matrix_Entries));
-            // If(CountRows(colEntryErrors)>0, Notify("Some rows failed to save. Check colEntryErrors.", NotificationType.Error));
+            // If(CountRows(colEntryErrors) > 0, Notify("Some rows failed to save. Check colEntryErrors.", NotificationType.Error));
 
             Notify("Saved " & Text(CountRows(changed)) & " change(s).", NotificationType.Success)
         )
