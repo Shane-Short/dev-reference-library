@@ -1,48 +1,31 @@
-// Vars you already use
-Set(varMe, Lower(Trim(Coalesce(Office365Users.MyProfileV2().mail, User().Email))));
-
-// Create error collections with schema, then clear
-ClearCollect(colEntryErrors, Table({ Error: "", Column: "" })); Clear(colEntryErrors);
-ClearCollect(colSaveErrors,  Table({ Module: "", Category: "", Item: "", Message: "" })); Clear(colSaveErrors);
-
-// (keep the rest of your existing OnVisible after this)
-
-
-// Use a real Reference row so required fields (if any) are satisfied
-With(
-    { r: First(Skill_Matrix_Reference) },
-    Patch(
-        Skill_Matrix_Entries,
-        Defaults(Skill_Matrix_Entries),
+// Build "Last saved" text in Pacific time (no 2-arg TimeZoneOffset needed)
+Set(
+    varLastSavedText,
+    With(
         {
-            Title: "_DirectWriteTest_",
-            Employee: "Debug User",
-            Employee_Email: varMe,
-            Module: "_TestModule_",
-            Category: "_TestCat_",
-            Item: "_TestItem_",
-            Skill_Level: 1,
-            Reference_ID: r.Reference_ID,
-            Mod_ID: r.Mod_ID,
-            Timestamp: Now()
-        }
+            // 1) Get UTC "now"
+            nowUtc: DateAdd(Now(), -TimeZoneOffset(Now()), TimeUnit.Minutes),
+
+            // 2) Compute current year's DST window for Pacific (approx by date; accurate for normal use)
+            y: Year(Now()),
+            mar1: Date(y, 3, 1),
+            mar1Dow: Weekday(mar1, StartOfWeek.Sunday),
+            firstSunMar: DateAdd(mar1, Mod(7 - mar1Dow, 7), TimeUnit.Days),
+            secondSunMar: DateAdd(firstSunMar, 7, TimeUnit.Days), // DST starts 2nd Sunday Mar
+
+            nov1: Date(y, 11, 1),
+            nov1Dow: Weekday(nov1, StartOfWeek.Sunday),
+            firstSunNov: DateAdd(nov1, Mod(7 - nov1Dow, 7), TimeUnit.Days), // DST ends 1st Sunday Nov
+
+            // 3) Is "now" within PDT window? (date-level check; near-changeover hours may differ)
+            inDST: nowUtc >= Date(secondSunMar) && nowUtc < Date(firstSunNov),
+
+            // 4) Pacific offset from UTC: -7h during DST, otherwise -8h
+            ptOffsetMinutes: If(inDST, -420, -480),
+
+            // 5) Convert UTC → Pacific
+            ptNow: DateAdd(nowUtc, ptOffsetMinutes, TimeUnit.Minutes)
+        },
+        "Last saved: " & Text(ptNow, "[$-en-US]mmm d, yyyy h:mm tt")
     )
 );
-
-// Capture server-side errors from this datasource
-Clear(colEntryErrors);
-Collect(colEntryErrors, Errors(Skill_Matrix_Entries));
-
-// Visual feedback
-Notify(
-    "Direct write attempted. Errors: " & Text(CountRows(colEntryErrors)),
-    If(CountRows(colEntryErrors) > 0, NotificationType.Error, NotificationType.Success)
-);
-
-If(
-    IsEmpty(colEntryErrors),
-    "No Errors",
-    Concat(colEntryErrors, Error & " — " & Column, Char(10))
-)
-
-
