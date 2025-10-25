@@ -1,25 +1,21 @@
 Module_ID:
 If(
-    // 1) use the selected ID if present
-    !IsBlank(varSelectedModuleId) && Len(Text(varSelectedModuleId)) > 0,
-    "" & varSelectedModuleId,
+    // 1) Prefer the AFTER snapshot (post-save authoritative)
+    CountRows(colRefAfterSave) > 0,
+    "" & First(colRefAfterSave).Mod_ID,
 
-    // 2) else try Modules list by name
+    // 2) Else use the BEFORE snapshot
     If(
-        !IsBlank(varSelectedModuleName),
-        "" & LookUp(Skill_Matrix_Modules, Title = varSelectedModuleName, Module_ID),
+        CountRows(colRefBeforeSave) > 0,
+        "" & First(colRefBeforeSave).Mod_ID,
 
-        // 3) else fallback to AFTER snapshot
+        // 3) Else use the selected module id if present
         If(
-            CountRows(colRefAfterSave) > 0,
-            "" & First(colRefAfterSave).Mod_ID,
+            !IsBlank(varSelectedModuleId),
+            "" & varSelectedModuleId,
 
-            // 4) else fallback to BEFORE snapshot (last resort)
-            If(
-                CountRows(colRefBeforeSave) > 0,
-                "" & First(colRefBeforeSave).Mod_ID,
-                ""    // empty string as final text fallback
-            )
+            // 4) LAST resort: look up by name in Modules
+            "" & Text( LookUp(Skill_Matrix_Modules, Title = varSelectedModuleName, Module_ID) )
         )
     )
 ),
