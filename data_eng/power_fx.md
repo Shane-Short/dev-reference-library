@@ -12,3 +12,12 @@ With(
     Added_CatItem_IDs:   Concat(addIds, Text(Value), ";"),
     Removed_CatItem_IDs: Concat(remIds, Text(Value), ";")
 )
+
+
+
+
+// when you detect an ADD
+Collect(colDidAdd, { Reference_ID: ref.Reference_ID, CatItem_ID: ref.CatItem_ID });
+
+// when you detect a REMOVE
+Collect(colDidRemove, { Reference_ID: ref.Reference_ID, CatItem_ID: ref.CatItem_ID });
