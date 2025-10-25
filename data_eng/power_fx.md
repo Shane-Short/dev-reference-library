@@ -1,16 +1,18 @@
 Set(
     varModuleIdSafe,
     Coalesce(
-        // 1) selected module id if present (coerced to text)
+        // 1) selected module id (text)
         If(
             !IsBlank(varSelectedModuleId) && Len(Trim(Text(varSelectedModuleId))) > 0,
-            Text(varSelectedModuleId)
+            Text(varSelectedModuleId),
+            ""                                  // << force text
         ),
-        // 2) lookup by module name (coerced to text)
-        Text(LookUp(Skill_Matrix_Modules, Title = varSelectedModuleName, Module_ID)),
-        // 3) fallback from AFTER snapshot
-        Text(First(colRefAfterSave).Mod_ID),
+        // 2) lookup by module name (text)
+        Text( LookUp(Skill_Matrix_Modules, Title = varSelectedModuleName, Module_ID) ),
+        // 3) fallback from AFTER snapshot (use LookUp(true, …) instead of First(...) to avoid empty-table issues)
+        Text( LookUp(colRefAfterSave,  true, Mod_ID) ),
         // 4) fallback from BEFORE snapshot
-        Text(First(colRefBeforeSave).Mod_ID)
+        Text( LookUp(colRefBeforeSave, true, Mod_ID) ),
+        ""                                      // final text fallback
     )
 );
