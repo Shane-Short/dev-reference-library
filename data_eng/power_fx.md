@@ -1,29 +1,25 @@
-// Force varModuleIdSafe to be TEXT first
-Set(varModuleIdSafe, "");
-
-// 1) Try the selected module id (coerced to text)
+Module_ID:
 If(
+    // 1) use the selected ID if present
     !IsBlank(varSelectedModuleId) && Len(Text(varSelectedModuleId)) > 0,
-    Set(varModuleIdSafe, "" & varSelectedModuleId)
-);
+    "" & varSelectedModuleId,
 
-// 2) Fallback: lookup by module name (text)
-If(
-    IsBlank(varModuleIdSafe) && !IsBlank(varSelectedModuleName),
-    Set(
-        varModuleIdSafe,
-        "" & LookUp(Skill_Matrix_Modules, Title = varSelectedModuleName, Module_ID)
+    // 2) else try Modules list by name
+    If(
+        !IsBlank(varSelectedModuleName),
+        "" & LookUp(Skill_Matrix_Modules, Title = varSelectedModuleName, Module_ID),
+
+        // 3) else fallback to AFTER snapshot
+        If(
+            CountRows(colRefAfterSave) > 0,
+            "" & First(colRefAfterSave).Mod_ID,
+
+            // 4) else fallback to BEFORE snapshot (last resort)
+            If(
+                CountRows(colRefBeforeSave) > 0,
+                "" & First(colRefBeforeSave).Mod_ID,
+                ""    // empty string as final text fallback
+            )
+        )
     )
-);
-
-// 3) Fallback: AFTER snapshot (if present)
-If(
-    IsBlank(varModuleIdSafe) && CountRows(colRefAfterSave) > 0,
-    Set(varModuleIdSafe, "" & First(colRefAfterSave).Mod_ID)
-);
-
-// 4) Fallback: BEFORE snapshot (if present)
-If(
-    IsBlank(varModuleIdSafe) && CountRows(colRefBeforeSave) > 0,
-    Set(varModuleIdSafe, "" & First(colRefBeforeSave).Mod_ID)
-);
+),
