@@ -1,37 +1,83 @@
-// === Queue ModuleUpdated assignment (compute diffs first, then Patch) ===
+// === Queue ModuleUpdated assignment (diff current working set vs. persisted Reference) ===
 If(
     CountRows(colDidAdd) + CountRows(colDidRemove) + CountRows(colDidUpdate) > 0,
+
+    // AFTER = current selection; guarantee CatItem_ID exists per row
+    ClearCollect(
+        colAfterCatItems,
+        ForAll(
+            colModuleCatItems_Working As w,
+            {
+                CatItem_ID: Coalesce(
+                    w.CatItem_ID,
+                    // fallback via CategoryItems table
+                    LookUp(
+                        Skill_Matrix_CategoryItems,
+                        Category = w.Category && Item = w.Item,
+                        CatItem_ID
+                    ),
+                    // final fallback via Reference (scoped to this module)
+                    LookUp(
+                        Skill_Matrix_Reference,
+                        Mod_ID = varSelectedModuleId && Category = w.Category && Item = w.Item,
+                        CatItem_ID
+                    )
+                )
+            }
+        )
+    );
+
+    // BEFORE = what Reference currently has for this module
+    ClearCollect(
+        colBeforeCatItems,
+        ShowColumns(
+            Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId),
+            "CatItem_ID"
+        )
+    );
+
+    // Added = in AFTER but not in BEFORE
+    ClearCollect(
+        colAddedCatItems,
+        Filter(
+            colAfterCatItems As a,
+            !IsBlank(a.CatItem_ID) &&
+            CountIf(colBeforeCatItems, CatItem_ID = a.CatItem_ID) = 0
+        )
+    );
+
+    // Removed = in BEFORE but not in AFTER
+    ClearCollect(
+        colRemovedCatItems,
+        Filter(
+            colBeforeCatItems As b,
+            !IsBlank(b.CatItem_ID) &&
+            CountIf(colAfterCatItems, CatItem_ID = b.CatItem_ID) = 0
+        )
+    );
+
+    // Create one Assignment row capturing the change
     With(
         {
             code: "EditMod-" & Text(Now(), "yyyymmdd-hhnnss"),
-            req: Office365Users.UserProfileV2(User().Email),
-
-            // BEFORE = what Reference currently has for this module
-            beforeTbl: Filter(Skill_Matrix_Reference As r, r.Mod_ID = varSelectedModuleId),
-
-            // AFTER = what the working selection currently holds (must include CatItem_ID)
-            afterTbl:  colModuleCatItems_Working,
-
-            // Diff tables
-            addTbl: Filter(afterTbl As w, CountIf(beforeTbl, CatItem_ID = w.CatItem_ID) = 0),
-            remTbl: Filter(beforeTbl As r, CountIf(afterTbl, CatItem_ID = r.CatItem_ID) = 0)
+            req:  Office365Users.UserProfileV2(User().Email)
         },
         Patch(
             Skill_Matrix_Assignments,
             Defaults(Skill_Matrix_Assignments),
             {
                 Title: code,
-                Operation: { Value: "ModuleUpdated" },
-                Status:    { Value: "Pending" },
+                Operation: { Value: "ModuleUpdated" },   // Choice
+                Status:    { Value: "Pending" },         // Choice
 
                 Module_ID:   varSelectedModuleId,
                 Module_Name: varSelectedModuleName,
 
-                // Use the precomputed tables here (no nested With/records inside fields)
-                Added_CatItem_IDs:   Concat(addTbl, CatItem_ID, ";"),
-                Removed_CatItem_IDs: Concat(remTbl, CatItem_ID, ";"),
-                Added_Count:         CountRows(addTbl),
-                Removed_Count:       CountRows(remTbl),
+                // Diff payload for Flow
+                Added_CatItem_IDs:   Concat(colAddedCatItems,   CatItem_ID, ";"),
+                Removed_CatItem_IDs: Concat(colRemovedCatItems, CatItem_ID, ";"),
+                Added_Count:         CountRows(colAddedCatItems),
+                Removed_Count:       CountRows(colRemovedCatItems),
                 Updated_Count:       CountRows(colDidUpdate),
 
                 RequestedAt: Now(),
@@ -47,11 +93,4 @@ If(
             }
         )
     )
-)
-
-
-// when you detect an ADD
-Collect(colDidAdd, { Reference_ID: ref.Reference_ID, CatItem_ID: ref.CatItem_ID });
-
-// when you detect a REMOVE
-Collect(colDidRemove, { Reference_ID: ref.Reference_ID, CatItem_ID: ref.CatItem_ID });
+);
