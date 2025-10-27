@@ -1,27 +1,65 @@
-// 2.3 (Optional) keep Skill_Type synced with CategoryItems for all links in this module
-// Project to a known shape so Skill_Type is recognized
-ClearCollect(
-    colRefsForSync,
-    ShowColumns(
-        Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId),
-        "Reference_ID", "CatItem_ID", "Skill_Type"
-    )
-);
+// Track CatItems whose Skill_Type changed (distinct ids)
+Clear(colCIChanged);
 
 ForAll(
-    colRefsForSync As ref,
+    colModuleCatItems_Working As w,
     With(
-        { ci2: LookUp(Skill_Matrix_CategoryItems, CatItem_ID = ref.CatItem_ID) },
+        { ci: LookUp(Skill_Matrix_CategoryItems, CatItem_ID = w.CatItem_ID) },
         If(
-            !IsBlank(ci2) && ci2.Skill_Type <> ref.Skill_Type,
+            !IsBlank(ci) && ci.Skill_Type <> w.Skill_Type,
+            // Persist the change if not already done elsewhere
             Patch(
-                Skill_Matrix_Reference,
-                LookUp(Skill_Matrix_Reference, Reference_ID = ref.Reference_ID),
-                { Skill_Type: ci2.Skill_Type }
-            )
+                Skill_Matrix_CategoryItems,
+                ci,
+                { Skill_Type: w.Skill_Type }
+            );
+            // Record the changed CatItem
+            Collect(colCIChanged, { CatItem_ID: w.CatItem_ID })
         )
     )
 );
 
-// (optional) cleanup
-Clear(colRefsForSync)
+// De-dup
+ClearCollect(colCIChanged, Distinct(colCIChanged, CatItem_ID));
+
+
+
+If(
+    CountRows(colCIChanged) > 0,
+    With(
+        {
+            code: "EditCI-" & Text(Now(), "yyyymmdd-hhnnss"),
+            req:  Office365Users.UserProfileV2(User().Email)
+        },
+        Patch(
+            Skill_Matrix_Assignments,
+            Defaults(Skill_Matrix_Assignments),
+            {
+                Title:    code,
+                Operation:{ Value: "CatItem_Update" },
+                Status:   { Value: "Pending" },
+
+                // Payload for Flow
+                Updated_CatItem_IDs: Concat(colCIChanged, CatItem_ID, ";"),
+                Updated_Count:       CountRows(colCIChanged),
+
+                RequestedAt: Now(),
+                RequestedBy: {
+                    '@odata.type': "#Microsoft.Azure.Connectors.SharePoint.SPListExpandedUser",
+                    Claims: "i:0#.f|membership|" & Coalesce(req.mail, User().Email),
+                    DisplayName: Coalesce(req.displayName, User().FullName),
+                    Email:       Coalesce(req.mail, User().Email),
+                    Department:  Coalesce(req.department, ""),
+                    JobTitle:    Coalesce(req.jobTitle, ""),
+                    Picture:     ""
+                }
+            }
+        )
+    )
+);
+
+// optional tidy-up
+Clear(colCIChanged);
+
+
+
