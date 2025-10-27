@@ -4,8 +4,8 @@ ForAll(
     With(
         { ci2: LookUp(Skill_Matrix_CategoryItems, CatItem_ID = ThisRecord.CatItem_ID) },
         If(
-            !IsBlank(ci2) && ci2.Skill_Type <> ThisRecord.SkillLevel,
-            Patch(Skill_Matrix_Reference, ThisRecord, { SkillLevel: ci2.Skill_Type })
+            !IsBlank(ci2) && ci2.Skill_Type <> ThisRecord.'Skill Type',
+            Patch(Skill_Matrix_Reference, ThisRecord, { 'Skill Type': ci2.Skill_Type })
         )
     )
 );
