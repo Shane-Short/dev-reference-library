@@ -4,23 +4,21 @@
 
 // 2.1 Add any newly-checked CatItems for this module
 ForAll(
-    // Work only with rows that *have* a CatItem_ID and aren't already linked
     Filter(
-        colModuleCatItems_Working As row,
-        !IsBlank(row.CatItem_ID) &&
+        colModuleCatItems_Working,
+        !IsBlank(CatItem_ID) &&
         IsBlank(
             LookUp(
                 Skill_Matrix_Reference,
-                Mod_ID = varSelectedModuleId && CatItem_ID = row.CatItem_ID
+                Mod_ID = varSelectedModuleId && CatItem_ID = CatItem_ID
             )
         )
     ),
     With(
         {
-            id: row.CatItem_ID, // capture once to avoid alias scope weirdness
-            ci: LookUp(Skill_Matrix_CategoryItems, CatItem_ID = row.CatItem_ID)
+            id: CatItem_ID, // current row's field (no alias used)
+            ci: LookUp(Skill_Matrix_CategoryItems, CatItem_ID = CatItem_ID)
         },
-        // only Patch if we could resolve the Category/Item (defensive)
         If(
             !IsBlank(id) && !IsBlank(ci),
             Patch(
@@ -31,10 +29,10 @@ ForAll(
                     Mod_ID: varSelectedModuleId,
                     CatItem_ID: id,
 
-                    // denormalized text (keeps reports/UI happy)
-                    Module:    varSelectedModuleName,
-                    Category:  ci.Category,
-                    Item:      ci.Item,
+                    // denormalized text
+                    Module:     varSelectedModuleName,
+                    Category:   ci.Category,
+                    Item:       ci.Item,
                     Skill_Type: ci.Skill_Type,
 
                     Created_By: User().Email,
