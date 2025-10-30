@@ -1,155 +1,113 @@
-// 1. Find added modules (in working but not in original)
+// 1. Cache which preset we chose
+Set(varSelectedPresetId, cmbEditPreset.Selected.Value);
+Set(varSelectedPresetTitle, cmbEditPreset.Selected.Title);
+
+// 2. Build a normalized table of active modules for this preset
+//    Shape: Module_ID, ModuleName
 ClearCollect(
-    colAddedModules,
-    Filter(
-        colModulesInPreset_Edit_Working,
-        !(Module_ID in colModulesInPreset_Edit.Module_ID)
+    colModulesInPreset_Original,
+    AddColumns(
+        ShowColumns(
+            Filter(
+                Skill_Matrix_Team_Presets,
+                Preset_ID = varSelectedPresetId,
+                IsActive = true
+            ),
+            "Module_ID",
+            "Modules"            // readable module name column in SP
+        ),
+        "ModuleName", Modules
     )
 );
 
-// 2. Find removed modules (in original but not in working)
+// 3. Working copy (the only one we will edit from here on out)
 ClearCollect(
-    colRemovedModules,
-    Filter(
-        colModulesInPreset_Edit,
-        !(Module_ID in colModulesInPreset_Edit_Working.Module_ID)
-    )
+    colModulesInPreset_Edit_Working,
+    colModulesInPreset_Original
 );
 
-// 3. Prep requester info + timestamp once
-With(
-    {
-        req: Office365Users.UserProfileV2(User().Email),
-        nowStr: Text(Now(), "yyyymmdd-hhnnss")
-    },
+// 4. Reset any local "confirm remove" UI state if you’re using it
+UpdateContext({ varConfirmRemove: false });
+Set(varModuleToRemove, "");
 
-    // ─────────────────────────────────────────
-    // 4. APPLY CHANGES TO Skill_Matrix_Team_Presets
-    //    4a. ADD any newly selected modules
-    ForAll(
-        colAddedModules As a,
-        Patch(
-            Skill_Matrix_Team_Presets,
-            Defaults(Skill_Matrix_Team_Presets),
-            {
-                Preset_ID: varSelectedPresetId,
-                Title: varSelectedPresetTitle,
 
-                // Store BOTH name and ID
-                Modules: a.ModuleName,        // readable
-                Module_ID: a.Module_ID,       // GUID for flow
+// remove this row from the WORKING collection only
+RemoveIf(
+    colModulesInPreset_Edit_Working,
+    Module_ID = ThisItem.Module_ID
+);
 
-                IsActive: true,
-                Created_By: User().Email,
-                Created_At: Now()
-            }
-        );
 
-        // Log the AddModule assignment (only if not already pending)
+
+If(
+    !IsBlank(cmbAddModules_Edit.Selected),
+    With(
+        {
+            selModuleId: cmbAddModules_Edit.Selected.Mod_ID,      // rename if yours is Module_ID
+            selModuleName: cmbAddModules_Edit.Selected.Title      // rename if yours is ModuleName
+        },
+        // only add if this Module_ID not already in working
         If(
             IsBlank(
                 LookUp(
-                    Skill_Matrix_Assignments,
-                    Team_Preset_ID = varSelectedPresetId &&
-                    Operation.Value = "AddModule" &&
-                    Module_Name = a.ModuleName &&
-                    Status.Value = "Pending"
+                    colModulesInPreset_Edit_Working,
+                    Module_ID = selModuleId
                 )
             ),
-            Patch(
-                Skill_Matrix_Assignments,
-                Defaults(Skill_Matrix_Assignments),
+            Collect(
+                colModulesInPreset_Edit_Working,
                 {
-                    Title: "AddMod-" & nowStr,
-
-                    Team_Preset: varSelectedPresetTitle,
-                    Team_Preset_ID: varSelectedPresetId,
-
-                    // 👇 keep these columns/names the same as today
-                    Operation: { Value: "AddModule" },
-                    Status: { Value: "Pending" },
-
-                    Module_Name: a.ModuleName,
-                    Module_ID: a.Module_ID,
-
-                    RequestedAt: Now(),
-                    RequestedBy: {
-                        '@odata.type': "#Microsoft.Azure.Connectors.SharePoint.SPListExpandedUser",
-                        Claims: "i:0#.f|membership|" & Lower(Coalesce(req.mail, User().Email)),
-                        DisplayName: Coalesce(req.displayName, User().FullName),
-                        Email: Coalesce(req.mail, User().Email),
-                        Department: Coalesce(req.department, ""),
-                        JobTitle: Coalesce(req.jobTitle, ""),
-                        Picture: ""
-                    }
+                    Module_ID: selModuleId,
+                    ModuleName: selModuleName
                 }
             )
         )
     );
-
-    //    4b. REMOVE any modules that were deselected
-    ForAll(
-        colRemovedModules As r,
-        // 4b-i) Mark preset row inactive instead of hard-delete
-        Patch(
-            Skill_Matrix_Team_Presets,
-            LookUp(
-                Skill_Matrix_Team_Presets,
-                Preset_ID = varSelectedPresetId &&
-                Module_ID = r.Module_ID
-            ),
-            {
-                IsActive: false
-            }
-        );
-
-        // 4b-ii) Log the RemMod assignment (always mark Completed here, same as your original)
-        Patch(
-            Skill_Matrix_Assignments,
-            Defaults(Skill_Matrix_Assignments),
-            {
-                Title: "RemMod-" & nowStr,
-
-                Team_Preset: varSelectedPresetTitle,
-                Team_Preset_ID: varSelectedPresetId,
-
-                // 👇 keep existing semantics
-                Operation: { Value: "RemoveModule" },
-                Status: { Value: "Completed" },
-
-                Module_Name: r.ModuleName,
-                Module_ID: r.Module_ID,
-
-                RequestedAt: Now(),
-                RequestedBy: {
-                    '@odata.type': "#Microsoft.Azure.Connectors.SharePoint.SPListExpandedUser",
-                    Claims: "i:0#.f|membership|" & Lower(Coalesce(req.mail, User().Email)),
-                    DisplayName: Coalesce(req.displayName, User().FullName),
-                    Email: Coalesce(req.mail, User().Email),
-                    Department: Coalesce(req.department, ""),
-                    JobTitle: Coalesce(req.jobTitle, ""),
-                    Picture: ""
-                }
-            }
-        )
-    );
+    Reset(cmbAddModules_Edit)
 );
 
-// 5. Refresh baseline snapshot so diffs reset
+
+
+
 ClearCollect(
-    colModulesInPreset_Edit,
-    colModulesInPreset_Edit_Working
+    colAddedModules,
+    Filter(colModulesInPreset_Edit_Working, IsBlank(LookUp(colModulesInPreset_Edit, Module_ID = Module_ID)))
 );
 
-// 6. Notify user
-Notify(
-    "Preset changes saved. " &
-    "Added: " & CountRows(colAddedModules) &
-    " | Removed: " & CountRows(colRemovedModules),
-    NotificationType.Success
+ClearCollect(
+    colRemovedModules,
+    Filter(colModulesInPreset_Edit, IsBlank(LookUp(colModulesInPreset_Edit_Working, Module_ID = Module_ID)))
 );
 
-// 7. Reset the dropdown and clear pending selection
-Reset(cmbAddModules_Edit);
-UpdateContext({varModuleToRemove: ""});
-UpdateContext({varConfirmRemove: false});
+
+
+
+// ADDED = in working now, but not in original snapshot
+ClearCollect(
+    colAddedModules,
+    Filter(
+        colModulesInPreset_Edit_Working,
+        IsBlank(
+            LookUp(
+                colModulesInPreset_Original,
+                Module_ID = Module_ID
+            )
+        )
+    )
+);
+
+// REMOVED = was in original snapshot, but not in working now
+ClearCollect(
+    colRemovedModules,
+    Filter(
+        colModulesInPreset_Original,
+        IsBlank(
+            LookUp(
+                colModulesInPreset_Edit_Working,
+                Module_ID = Module_ID
+            )
+        )
+    )
+);
+
+
