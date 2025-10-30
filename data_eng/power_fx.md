@@ -1,31 +1,40 @@
-// 4. Soft-remove (IsActive=false) for anything in colRemovedModules
+// 4. Deactivate removed modules in Team_Presets
 
-// 4.1 Build a list of SharePoint IDs we want to deactivate
-ClearCollect(
-    colPresetRowsToDeactivate,
-    ForAll(
-        colRemovedModules As gone,
-        ForAll(
-            Filter(
-                Skill_Matrix_Team_Presets,
-                Preset_ID = varSelectedPresetId,
-                IsActive = true,
-                (
-                    Module_ID = gone.Module_ID
-                    ||
-                    Modules = gone.ModuleName
+// 4.1 Rebuild the helper collection in a way that guarantees column names
+Clear(colPresetRowsToDeactivate);
+
+ForAll(
+    colRemovedModules As goneModule,
+    With(
+        {
+            matchesForThisModule:
+                Filter(
+                    Skill_Matrix_Team_Presets,
+                    Preset_ID = varSelectedPresetId,
+                    IsActive = true,
+                    (
+                        Module_ID = goneModule.Module_ID
+                        ||
+                        Modules = goneModule.ModuleName
+                    )
                 )
-            ) As matchRow,
-            {
-                RowID: matchRow.ID,          // <- we CONTROL the name now
-                RowModuleID: matchRow.Module_ID,
-                RowModuleName: matchRow.Modules
-            }
+        },
+        // Collect each matching row with stable column names
+        ForAll(
+            matchesForThisModule As m,
+            Collect(
+                colPresetRowsToDeactivate,
+                {
+                    RowID: m.ID,
+                    RowModuleID: m.Module_ID,
+                    RowModuleName: m.Modules
+                }
+            )
         )
     )
 );
 
-// 4.2 Loop those RowIDs, Patch each one by LookUp()
+// 4.2 Now patch each row in that helper collection
 ForAll(
     colPresetRowsToDeactivate As deadRow,
     Patch(
@@ -42,5 +51,5 @@ ForAll(
     )
 );
 
-// 4.3 Cleanup helper
+// 4.3 Cleanup helper (optional but nice)
 Clear(colPresetRowsToDeactivate);
