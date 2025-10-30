@@ -1,33 +1,31 @@
-// 1. Ensure the working collection exists with the shape we expect,
-//    but do NOT seed it with a blank row.
+// 1. Just in case from previous runs, clear any rows
+//    where Module_ID is blank before we add a new one.
 If(
-    !IsCollection(colModulesInPreset_New),
-    ClearCollect(
-        colModulesInPreset_New,
-        Table(
-            // create the table with column names, but no rows:
-            { Modules: Blank(), Module_ID: Blank() }
+    !IsEmpty(
+        Filter(
+            colModulesInPreset_New,
+            IsBlank(Module_ID)
         )
-    );
-    // then immediately clear it so we don't keep that stub row
-    Clear(colModulesInPreset_New)
+    ),
+    RemoveIf(
+        colModulesInPreset_New,
+        IsBlank(Module_ID)
+    )
 );
 
-// 2. Pull name + id from the selected module in the combo box.
-//    Use Coalesce so we work with either ModuleName/Module_ID
-//    or Title/Mod_ID depending on how colAllModules was built.
+// 2. Grab the selected module's name + ID from the combo box.
+//    We Coalesce because sometimes your data is shaped
+//    {ModuleName, Module_ID} and sometimes {Title, Mod_ID}.
 With(
     {
-        pickedName:
-            Coalesce(
-                cmbPresetModules.Selected.ModuleName,
-                cmbPresetModules.Selected.Title
-            ),
-        pickedId:
-            Coalesce(
-                cmbPresetModules.Selected.Module_ID,
-                cmbPresetModules.Selected.Mod_ID
-            )
+        pickedName: Coalesce(
+            cmbPresetModules.Selected.ModuleName,
+            cmbPresetModules.Selected.Title
+        ),
+        pickedId: Coalesce(
+            cmbPresetModules.Selected.Module_ID,
+            cmbPresetModules.Selected.Mod_ID
+        )
     },
 
     // 3. Only collect if:
@@ -44,27 +42,26 @@ With(
         Collect(
             colModulesInPreset_New,
             {
-                Modules: pickedName,
-                Module_ID: pickedId
-            }
+                Modules: pickedName,   // human-readable name
+                Module_ID: pickedId    // GUID/id we need in Flow
+            )
         )
     )
 );
 
-// 4. Hard cleanup just in case: remove any accidental blank rows
-//    (Module_ID = Blank()) that might have slipped in.
+// 4. Safety cleanup again (in case Collect injected blanks somehow)
 If(
-    CountRows(
+    !IsEmpty(
         Filter(
             colModulesInPreset_New,
             IsBlank(Module_ID)
         )
-    ) > 0,
+    ),
     RemoveIf(
         colModulesInPreset_New,
         IsBlank(Module_ID)
     )
 );
 
-// 5. Reset the combo so user can pick another
+// 5. Reset the combo so user can pick another module
 Reset(cmbPresetModules)
