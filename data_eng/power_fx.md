@@ -1,67 +1,57 @@
-// 1. Just in case from previous runs, clear any rows
-//    where Module_ID is blank before we add a new one.
+// 0. Guard: make sure we have at least one module chosen and a preset name
 If(
-    !IsEmpty(
-        Filter(
-            colModulesInPreset_New,
-            IsBlank(Module_ID)
-        )
-    ),
-    RemoveIf(
-        colModulesInPreset_New,
-        IsBlank(Module_ID)
-    )
-);
+    IsBlank(varPresetName) || CountRows(colModulesInPreset_New) = 0,
+    Notify("Please enter a preset name and select at least one module.", NotificationType.Error),
+    
+    // else:
+    With(
+        {
+            // If you already set a preset GUID somewhere else, keep it.
+            // Otherwise generate one here.
+            newPresetId:
+                Coalesce(
+                    varFinalPresetId,
+                    GUID()
+                ),
 
-// 2. Grab the selected module's name + ID from the combo box.
-//    We Coalesce because sometimes your data is shaped
-//    {ModuleName, Module_ID} and sometimes {Title, Mod_ID}.
-With(
-    {
-        pickedName: Coalesce(
-            cmbPresetModules.Selected.ModuleName,
-            cmbPresetModules.Selected.Title
-        ),
-        pickedId: Coalesce(
-            cmbPresetModules.Selected.Module_ID,
-            cmbPresetModules.Selected.Mod_ID
-        )
-    },
+            thisUserEmail: User().Email,
+            nowTs: Now()
+        },
 
-    // 3. Only collect if:
-    //    - we actually got an ID
-    //    - it's not already in the list
-    If(
-        !IsBlank(pickedId) &&
-        IsBlank(
-            LookUp(
-                colModulesInPreset_New,
-                Module_ID = pickedId
+        // 1. Create one row in Skill_Matrix_Team_Presets per selected module
+        //    Include both module name and module ID
+        ForAll(
+            colModulesInPreset_New As m,
+            Patch(
+                Skill_Matrix_Team_Presets,
+                Defaults(Skill_Matrix_Team_Presets),
+                {
+                    Preset_ID: newPresetId,
+                    Title: varPresetName,
+
+                    // human-readable module name
+                    Modules: m.Modules,
+
+                    // machine-readable module id
+                    Module_ID: m.Module_ID,
+
+                    IsActive: true,
+                    Created_By: thisUserEmail,
+                    Created_At: nowTs
+                }
             )
-        ),
-        Collect(
-            colModulesInPreset_New,
-            {
-                Modules: pickedName,   // human-readable name
-                Module_ID: pickedId    // GUID/id we need in Flow
-            )
+        );
+
+        // 2. (Optional but smart) update varFinalPresetId so the app "remembers"
+        Set(varFinalPresetId, newPresetId);
+
+        // 3. Clear working collection so UI looks clean
+        Clear(colModulesInPreset_New);
+
+        // 4. Let the user know
+        Notify(
+            "Preset '" & varPresetName & "' saved with Module IDs.",
+            NotificationType.Success
         )
     )
 );
-
-// 4. Safety cleanup again (in case Collect injected blanks somehow)
-If(
-    !IsEmpty(
-        Filter(
-            colModulesInPreset_New,
-            IsBlank(Module_ID)
-        )
-    ),
-    RemoveIf(
-        colModulesInPreset_New,
-        IsBlank(Module_ID)
-    )
-);
-
-// 5. Reset the combo so user can pick another module
-Reset(cmbPresetModules)
