@@ -1,57 +1,27 @@
-// 0. Guard: make sure we have at least one module chosen and a preset name
 If(
-    IsBlank(varPresetName) || CountRows(colModulesInPreset_New) = 0,
-    Notify("Please enter a preset name and select at least one module.", NotificationType.Error),
-    
-    // else:
+    !IsBlank(cmbAddModules_Edit.Selected),
     With(
         {
-            // If you already set a preset GUID somewhere else, keep it.
-            // Otherwise generate one here.
-            newPresetId:
-                Coalesce(
-                    varFinalPresetId,
-                    GUID()
-                ),
-
-            thisUserEmail: User().Email,
-            nowTs: Now()
+            selName: cmbAddModules_Edit.Selected.ModuleName,
+            selId:   cmbAddModules_Edit.Selected.Module_ID
         },
-
-        // 1. Create one row in Skill_Matrix_Team_Presets per selected module
-        //    Include both module name and module ID
-        ForAll(
-            colModulesInPreset_New As m,
-            Patch(
-                Skill_Matrix_Team_Presets,
-                Defaults(Skill_Matrix_Team_Presets),
+        // only collect if we don't already have this module ID in the working list
+        If(
+            IsBlank(
+                LookUp(
+                    colModulesInPreset_Edit_Working,
+                    Module_ID = selId
+                )
+            ),
+            Collect(
+                colModulesInPreset_Edit_Working,
                 {
-                    Preset_ID: newPresetId,
-                    Title: varPresetName,
-
-                    // human-readable module name
-                    Modules: m.Modules,
-
-                    // machine-readable module id
-                    Module_ID: m.Module_ID,
-
-                    IsActive: true,
-                    Created_By: thisUserEmail,
-                    Created_At: nowTs
+                    Modules: selName,    // human-readable to show in gallery
+                    Module_ID: selId     // actual ID to persist to SharePoint
                 }
             )
-        );
-
-        // 2. (Optional but smart) update varFinalPresetId so the app "remembers"
-        Set(varFinalPresetId, newPresetId);
-
-        // 3. Clear working collection so UI looks clean
-        Clear(colModulesInPreset_New);
-
-        // 4. Let the user know
-        Notify(
-            "Preset '" & varPresetName & "' saved with Module IDs.",
-            NotificationType.Success
         )
-    )
+    );
+    // reset after each selection so dropdown doesn't lock up
+    Reset(cmbAddModules_Edit)
 );
