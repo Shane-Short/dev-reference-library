@@ -1,27 +1,23 @@
-If(
-    !IsBlank(cmbAddModules_Edit.Selected),
-    With(
-        {
-            selName: cmbAddModules_Edit.Selected.ModuleName,
-            selId:   cmbAddModules_Edit.Selected.Module_ID
-        },
-        // only collect if we don't already have this module ID in the working list
-        If(
-            IsBlank(
-                LookUp(
-                    colModulesInPreset_Edit_Working,
-                    Module_ID = selId
-                )
-            ),
-            Collect(
-                colModulesInPreset_Edit_Working,
-                {
-                    Modules: selName,    // human-readable to show in gallery
-                    Module_ID: selId     // actual ID to persist to SharePoint
-                }
-            )
-        )
-    );
-    // reset after each selection so dropdown doesn't lock up
-    Reset(cmbAddModules_Edit)
+// 1. Grab the preset the user picked
+Set(
+    varEditPresetId,
+    cmbEditPreset.Selected.Preset_ID
 );
+
+// 2. Build the working collection from what’s already in SharePoint
+ClearCollect(
+    colModulesInPreset_Edit_Working,
+    ForAll(
+        Filter(
+            Skill_Matrix_Team_Presets,
+            Preset_ID = varEditPresetId && IsActive = true
+        ),
+        {
+            Modules: Modules,          // readable name in Team_Presets
+            Module_ID: Module_ID       // GUID/text we added to Team_Presets
+        }
+    )
+);
+
+// (optional but smart) give the combo box a nudge so it updates Items
+UpdateContext({ varEditPresetNudge: Rand() })
