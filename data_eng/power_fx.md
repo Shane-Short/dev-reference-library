@@ -1,25 +1,36 @@
-With(
-    {
-        // All modules in the system shaped the same way
-        allMods: AddColumns(
-            colAllModules,
-            "ModuleName", Title,
-            "Module_ID", Mod_ID
-        ),
-        // Only modules still "live" in the working list
-        activeMods: Filter(
-            colModulesInPreset_Edit_Working,
-            IsActive = true
-        )
-    },
-    // We only show modules whose Module_ID is NOT already in activeMods
-    Filter(
-        allMods,
-        IsBlank(
-            LookUp(
-                activeMods,
-                Module_ID = Module_ID
+If(
+    !IsBlank(cmbAddModules_Edit.Selected),
+    With(
+        {
+            selId: cmbAddModules_Edit.Selected.Module_ID,
+            selName: cmbAddModules_Edit.Selected.ModuleName,
+
+            existingRow:
+                LookUp(
+                    colModulesInPreset_Edit_Working,
+                    Module_ID = selId
+                )
+        },
+        If(
+            // already exists in working list
+            !IsBlank(existingRow),
+            Patch(
+                colModulesInPreset_Edit_Working,
+                existingRow,
+                { IsActive: true }
+            ),
+            // otherwise add as brand new row
+            Collect(
+                colModulesInPreset_Edit_Working,
+                {
+                    Module_ID: selId,
+                    ModuleName: selName,
+                    IsActive: true
+                }
             )
         )
     )
-)
+);
+
+// IMPORTANT: clear selection so ComboBox is "free" again
+Set(varModulePick_Edit, Blank())
