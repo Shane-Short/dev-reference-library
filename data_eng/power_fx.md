@@ -1,55 +1,51 @@
-// 4. Deactivate removed modules in Team_Presets
+With(
+    {
+        currentIDs: AddColumns(
+            colModulesInPreset_Edit_Working,
+            keepId,
+            Module_ID
+        )
+    },
+    SortByColumns(
+        Filter(
+            colAllModules,
+            // keep only modules not already in the working preset
+            IsBlank(
+                LookUp(
+                    currentIDs,
+                    keepId = Mod_ID
+                )
+            )
+        ),
+        "Title",
+        SortOrder.Ascending
+    )
+)
 
-// 4.1 Rebuild the helper collection in a way that guarantees column names
-Clear(colPresetRowsToDeactivate);
 
-ForAll(
-    colRemovedModules As goneModule,
+
+If(
+    !IsBlank(cmbAddModules_Edit.Selected),
     With(
         {
-            matchesForThisModule:
-                Filter(
-                    Skill_Matrix_Team_Presets,
-                    Preset_ID = varSelectedPresetId,
-                    IsActive = true,
-                    (
-                        Module_ID = goneModule.Module_ID
-                        ||
-                        Modules = goneModule.ModuleName
-                    )
-                )
+            mId: cmbAddModules_Edit.Selected.Mod_ID,
+            mName: cmbAddModules_Edit.Selected.Title
         },
-        // Collect each matching row with stable column names
-        ForAll(
-            matchesForThisModule As m,
+        If(
+            IsBlank(
+                LookUp(
+                    colModulesInPreset_Edit_Working,
+                    Module_ID = mId
+                )
+            ),
             Collect(
-                colPresetRowsToDeactivate,
+                colModulesInPreset_Edit_Working,
                 {
-                    RowID: m.ID,
-                    RowModuleID: m.Module_ID,
-                    RowModuleName: m.Modules
+                    Module_ID: mId,
+                    ModuleName: mName
                 }
             )
         )
-    )
+    );
+    Reset(cmbAddModules_Edit)
 );
-
-// 4.2 Now patch each row in that helper collection
-ForAll(
-    colPresetRowsToDeactivate As deadRow,
-    Patch(
-        Skill_Matrix_Team_Presets,
-        LookUp(
-            Skill_Matrix_Team_Presets,
-            ID = deadRow.RowID
-        ),
-        {
-            IsActive: false,
-            Updated_By: User().Email,
-            Updated_At: Now()
-        }
-    )
-);
-
-// 4.3 Cleanup helper (optional but nice)
-Clear(colPresetRowsToDeactivate);
