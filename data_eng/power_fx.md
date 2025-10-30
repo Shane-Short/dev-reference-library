@@ -1,27 +1,16 @@
-If(
-    !IsEmpty(cmbPresetModules.SelectedItems),
-    With(
-        {
-            sel: First(cmbPresetModules.SelectedItems),
-            thisName: sel.ModuleName,     // or sel.Title if that’s your field
-            thisId:   sel.Mod_ID          // or sel.Module_ID — match your schema
-        },
-        If(
-            IsBlank(
-                LookUp(
-                    colModulesInPreset_New,
-                    Module_ID = thisId
-                )
+With(
+    { sel: First(cmbPresetModules.SelectedItems) },
+    Concatenate(
+        "FIELDS: ",
+        Concat(
+            Table(
+                "Title=" & Coalesce(sel.Title, "␀"),
+                "Modules=" & Coalesce(sel.Modules, "␀"),
+                "Module_ID=" & Coalesce(sel.Module_ID, "␀"),
+                "Mod_ID=" & Coalesce(sel.Mod_ID, "␀"),
+                "Name=" & Coalesce(sel.Name, "␀")
             ),
-            Collect(
-                colModulesInPreset_New,
-                {
-                    Modules: thisName,
-                    Module_ID: thisId
-                }
-            )
+            Value & " | "
         )
-    );
-    // clear selection safely without Reset()
-    Reset(cmbPresetModules)
+    )
 )
