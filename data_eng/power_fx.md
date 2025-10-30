@@ -1,26 +1,39 @@
 // 4. Soft-remove (IsActive=false) for anything in colRemovedModules
-ForAll(
-    colRemovedModules As gone,
+//    We can't Patch the same datasource we're iterating, so:
+//    4.1 Build a list of rows we need to deactivate
+ClearCollect(
+    colPresetRowsToDeactivate,
     ForAll(
+        colRemovedModules As gone,
         Filter(
             Skill_Matrix_Team_Presets,
             Preset_ID = varSelectedPresetId,
             IsActive = true,
-            // match either by Module_ID or by name fallback
-            (Module_ID = gone.Module_ID) ||
-            (Modules = gone.ModuleName)
-        ) As rowToClose,
-        Patch(
-            Skill_Matrix_Team_Presets,
-            rowToClose,
-            {
-                IsActive: false,
-                Updated_By: User().Email,
-                Updated_At: Now()
-            }
+            (
+                Module_ID = gone.Module_ID
+                ||
+                Modules = gone.ModuleName
+            )
         )
     )
 );
+
+// 4.2 Now Patch those SharePoint rows safely using the local collection
+ForAll(
+    colPresetRowsToDeactivate As deadRow,
+    Patch(
+        Skill_Matrix_Team_Presets,
+        deadRow,
+        {
+            IsActive: false,
+            Updated_By: User().Email,
+            Updated_At: Now()
+        }
+    )
+);
+
+// clear helper collection
+Clear(colPresetRowsToDeactivate);
 
 // 5. Insert new active rows in Team_Presets for anything in colAddedModules
 ForAll(
