@@ -1,63 +1,62 @@
 With(
     {
-        // 1. Normalize what's currently in this preset (what's in the gallery)
+        // Normalize the current working preset list
         curActiveModsNormalized:
             AddColumns(
                 colModulesInPreset_Edit_Working,
-                // Force consistent column names, even if they didn't exist before
                 "Module_ID_Norm",
                     Coalesce(
                         Module_ID,
-                        Mod_ID,    // fallback if it's still called Mod_ID in some rows
-                        ""         // last resort
+                        ""    // fallback if blank
                     ),
                 "ModuleName_Norm",
                     Coalesce(
                         ModuleName,
-                        Title,     // fallback if old rows still had Title instead of ModuleName
-                        Modules,   // fallback if old rows still had Modules instead of Title
-                        ""
+                        ""    // fallback if blank
                     ),
                 "ActiveFlag",
                     Coalesce(
                         IsActive,
-                        true       // if IsActive column didn't exist in older rows, treat as true
+                        true  // if IsActive isn't in the collection yet, assume true
                     )
             ),
 
-        // 2. Normalize the master module list (everything you COULD add)
+        // Normalize the master module list (all selectable modules)
         allModsNormalized:
             AddColumns(
                 colAllModules,
                 "Module_ID_Norm",
                     Coalesce(
-                        Mod_ID,
                         Module_ID,
-                        ""        // just in case
+                        ""   // should exist, but just in case
                     ),
                 "ModuleName_Norm",
                     Coalesce(
                         ModuleName,
-                        Title,
-                        ""
+                        ""   // should exist
                     )
             )
     },
 
-    // 3. Now build the dropdown list:
+    // Build the dropdown list = all modules NOT currently active in this preset
     SortByColumns(
         Filter(
-            allModsNormalized,
-            // Keep this module ONLY if it's not already Active in the working preset
+            allModsNormalized As cand,
             CountIf(
-                curActiveModsNormalized,
-                ActiveFlag = true &&
+                curActiveModsNormalized As cur,
+                cur.ActiveFlag = true &&
                 (
-                    // Prefer ID match when both sides have IDs
-                    (!IsBlank(Module_ID_Norm) && Module_ID_Norm = ThisRecord.Module_ID_Norm)
+                    // match by ID if both have an ID
+                    (
+                        !IsBlank(cur.Module_ID_Norm) &&
+                        cur.Module_ID_Norm = cand.Module_ID_Norm
+                    )
                     ||
-                    // Fallback: match by name if one/both rows didn't have IDs
-                    (IsBlank(Module_ID_Norm) && ModuleName_Norm = ThisRecord.ModuleName_Norm)
+                    // OR, if ID is blank just fall back to comparing names
+                    (
+                        IsBlank(cur.Module_ID_Norm) &&
+                        cur.ModuleName_Norm = cand.ModuleName_Norm
+                    )
                 )
             ) = 0
         ),
