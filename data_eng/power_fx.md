@@ -1,23 +1,38 @@
-// 1. Grab the preset the user picked
+// 1. Cache the selected preset's ID and Title into globals
 Set(
-    varEditPresetId,
-    cmbEditPreset.Selected.Preset_ID
+    varSelectedPresetId,
+    cmbEditPreset.Selected.Value      // <-- this is Preset_ID
+);
+Set(
+    varSelectedPresetTitle,
+    cmbEditPreset.Selected.Title      // <-- this is the preset name
 );
 
-// 2. Build the working collection from what’s already in SharePoint
+// 2. Load that preset's module rows from the SharePoint list
+//    We pull rows for just this Preset_ID, then project them into a clean shape:
+//    { ModuleName: <Modules column>, Module_ID: <Module_ID column> }
+
 ClearCollect(
-    colModulesInPreset_Edit_Working,
-    ForAll(
-        Filter(
-            Skill_Matrix_Team_Presets,
-            Preset_ID = varEditPresetId && IsActive = true
+    colModulesInPreset_Edit,
+    AddColumns(
+        ShowColumns(
+            Filter(
+                Skill_Matrix_Team_Presets,
+                Preset_ID = varSelectedPresetId   // use the var we just set
+            ),
+            "Modules",
+            "Module_ID"
         ),
-        {
-            Modules: Modules,          // readable name in Team_Presets
-            Module_ID: Module_ID       // GUID/text we added to Team_Presets
-        }
+        "ModuleName", Modules
     )
 );
 
-// (optional but smart) give the combo box a nudge so it updates Items
-UpdateContext({ varEditPresetNudge: Rand() })
+// 3. Make the working copy we'll mutate while editing
+ClearCollect(
+    colModulesInPreset_Edit_Working,
+    colModulesInPreset_Edit
+);
+
+// 4. Reset downstream remove-confirm UI (you'll hook this up later if you haven't already)
+UpdateContext({ varConfirmRemove: false });
+Set(varModuleToRemove, "");
