@@ -1,7 +1,22 @@
+// Rebuild working set for this module + this category
 ClearCollect(
     colModuleCatItems_Working,
-    Filter(
-        Skill_Matrix_Reference,
-        Mod_ID = varModuleIdSafe && IsActive = true
+    AddColumns(
+        Filter(
+            Skill_Matrix_CategoryItems,
+            Category = cmbSelectCategory.Selected.Value
+        ),
+        "IsSelectedForModule",
+        !IsBlank(
+            LookUp(
+                Skill_Matrix_Reference,
+                Mod_ID = varModuleIdSafe &&
+                CatItem_ID = CatItem_ID &&
+                IsActive = true
+            )
+        )
     )
 );
+
+
+
