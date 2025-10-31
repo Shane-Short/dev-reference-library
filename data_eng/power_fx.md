@@ -1,4 +1,4 @@
-// rebuild working list based on final saved state
+// Rebuild working list after save to reflect final Reference state
 If(
     And(
         !IsBlank(varSelectedModuleId),
@@ -38,6 +38,5 @@ If(
             )
         )
     ),
-    // else: if no valid module/category, just clear
     Clear(colModuleCatItems_Working)
 );
