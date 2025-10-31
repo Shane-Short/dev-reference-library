@@ -6,6 +6,15 @@ ClearCollect(
             Skill_Matrix_CategoryItems,
             Category = cmbSelectCategory.Selected.Value
         ),
+        "WasSelectedBefore",
+        !IsBlank(
+            LookUp(
+                Skill_Matrix_Reference,
+                Mod_ID = varModuleIdSafe &&
+                CatItem_ID = CatItem_ID &&
+                IsActive = true
+            )
+        ),
         "IsSelectedForModule",
         !IsBlank(
             LookUp(
@@ -17,6 +26,3 @@ ClearCollect(
         )
     )
 );
-
-
-
