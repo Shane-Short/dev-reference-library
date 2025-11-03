@@ -413,3 +413,21 @@ If(
   Collect(colPendingSel, { CatItem_ID: ThisItem.CatItem_ID, IsSelected: false }),
   UpdateIf(colPendingSel, CatItem_ID = ThisItem.CatItem_ID, { IsSelected: false })
 );
+
+
+
+
+
+// seed from current truth so the UI defaults match the list
+ClearCollect(colRefActiveIds,
+    AddColumns(
+        ShowColumns(Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true), CatItem_ID),
+        id, Text(CatItem_ID)
+    )
+);
+ClearCollect(colPendingSel,
+    AddColumns(
+        ShowColumns(Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true), CatItem_ID),
+        IsSelected, true
+    )
+);
