@@ -1,202 +1,116 @@
-// 6b) Build add/remove diffs from current working set vs active refs
-//    (no aliases; use ThisRecord.id so we never reference a missing alias)
-
+// 6a.1) Build rows we must insert (for ids in colAdds that lacked an existing ref)
 ClearCollect(
-    colToAdd,
-    Filter(
-        colModuleCatItems_Working,
-        IsSelectedForModule = true &&
-        CountIf(colRefActiveIds, id = ThisRecord.id) = 0
-    )
-);
-
-ClearCollect(
-    colToRemove,
-    Filter(
-        colModuleCatItems_Working,
-        IsSelectedForModule = false &&
-        CountIf(colRefActiveIds, id = ThisRecord.id) > 0
-    )
-);
-
-
-
-
-
-
-// 12.1 Refresh Reference so UI reflects truth post-save
-Refresh(Skill_Matrix_Reference);
-
-// 12.2 Recompute active Reference IDs for this module
-ClearCollect(
-    colRefActiveIds,
-    AddColumns(
-        ShowColumns(
-            Filter(
-                Skill_Matrix_Reference,
-                Mod_ID = varSelectedModuleId && IsActive = true
-            ),
-            CatItem_ID
-        ),
-        id, Text(CatItem_ID)
-    )
-);
-
-// 12.3 Rebuild the category’s working list with correct check-state
-If(
-    IsBlank(varSelectedModuleId) || IsBlank(cmbSelectCategory.Selected),
-    Clear(colModuleCatItems_Working),
-    With(
-        { catText: Text(cmbSelectCategory.Selected.Value) },
-        ClearCollect(
-            colModuleCatItems_Working,
-            AddColumns(
-                AddColumns(
-                    Filter(
-                        Skill_Matrix_CategoryItems,
-                        Text(Category) = catText
-                    ),
-                    id, Text(CatItem_ID)
-                ),
-                IsSelectedForModule,
-                CountIf(colRefActiveIds, id = ThisRecord.id) > 0
+    colAdd_NewRows,
+    ForAll(
+        colAdds As a,
+        With(
+            { existingRef: LookUp(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && Text(CatItem_ID) = a.id) },
+            If(
+                IsBlank(existingRef),
+                {
+                    Mod_ID:     varSelectedModuleId,
+                    CatItem_ID: IfError(Value(a.id), a.id),   // works whether CatItem_ID is Number or Text
+                    IsActive:   true,
+                    CreatedBy:  reqUserEmail,
+                    CreatedAt:  Now()
+                }
             )
         )
     )
 );
+// Remove blanks (when existingRef was found)
+ClearCollect(colAdd_NewRows, Filter(colAdd_NewRows, !IsBlank(Mod_ID)));
 
 
 
-// 14) Queue a single “ModuleUpdated” assignment with added/removed Reference_IDs
-With(
-    {
-        codeNow: "EditMod-" & Text(Now(), "yyyymmdd-hhnnss")
-    },
-    Patch(
-        Skill_Matrix_Assignments,
-        Defaults(Skill_Matrix_Assignments),
-        {
-            Title: codeNow,
-            Operation: { Value: "ModuleUpdated" },
-            Status: { Value: "Pending" },
-            Module_ID: varSelectedModuleId,
-            Module_Name: varSelectedModuleName,
 
-            Added_Reference_IDs: Concat(
-                ForAll(
-                    Coalesce(colToAdd, Table()),
-                    LookUp(
-                        Skill_Matrix_Reference,
-                        Mod_ID = varSelectedModuleId && Text(CatItem_ID) = Text(ThisRecord.CatItem_ID),
-                        Reference_ID
-                    )
-                ),
-                Text(Result),
-                ";"
-            ),
 
-            Removed_Reference_IDs: Concat(
-                ForAll(
-                    Coalesce(colToRemove, Table()),
-                    LookUp(
-                        Skill_Matrix_Reference,
-                        Mod_ID = varSelectedModuleId && Text(CatItem_ID) = Text(ThisRecord.CatItem_ID),
-                        Reference_ID
-                    )
-                ),
-                Text(Result),
-                ";"
-            ),
 
-            Added_Count:   varAddCount,
-            Removed_Count: varRemoveCount,
-            Updated_Count: varUpdateCount,
-            RequestedAt: Now(),
-            RequestedBy: {
-                '@odata.type': "#Microsoft.Azure.Connectors.SharePoint.SPListExpandedUser",
-                Claims: "i:0#.f|membership|" & User().Email,
-                DisplayName: User().FullName,
-                Email: User().Email
-            }
-        }
-    )
-);
+
 
 
 
 Set(varAddCount,    CountRows(Coalesce(colToAdd, Table())));
 Set(varRemoveCount, CountRows(Coalesce(colToRemove, Table())));
-Set(varUpdateCount, CountRows(Coalesce(colTypeChanges, Table()))); // set to 0 if you don’t track type changes
+Set(varUpdateCount, CountRows(Coalesce(colTypeChanges, Table())));
 
 
 
 
 
 
-// After you set varSelectedModuleId & varSelectedModuleName
+
+
+
+Set(varUpdCount,     CountRows(colCI_Changed));
+
+
+
+
+
+
+
+
+
+// cache refs for this module once
 ClearCollect(
-    colPendingSel,
-    AddColumns(
-        ShowColumns(
-            Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true),
-            CatItem_ID
-        ),
-        IsSelected, true
+    colRefAllByModule,
+    ShowColumns(
+        Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId),
+        "CatItem_ID", "Reference_ID", "IsActive"
     )
 );
 
-// Build colRefActiveIds for this module (used by Defaults below)
+
+
+
+
+
+
+
+Patch(
+    colToggleLog,
+    LookUp(colToggleLog, CatItem_ID = ThisItem.CatItem_ID),
+    { CatItem_ID: ThisItem.CatItem_ID, Desired: true }
+);
+
+
+
+
+
+
+
+Patch(
+    colToggleLog,
+    LookUp(colToggleLog, CatItem_ID = ThisItem.CatItem_ID),
+    { CatItem_ID: ThisItem.CatItem_ID, Desired: false }
+);
+
+
+
+
+
+
+
+
+// 4) Desired selection from global toggle log (all categories)
 ClearCollect(
-    colRefActiveIds,
+    colDesiredSel,
     AddColumns(
-        ShowColumns(
-            Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true),
-            CatItem_ID
-        ),
+        ShowColumns(Filter(colToggleLog, Desired = true), "CatItem_ID"),
         id, Text(CatItem_ID)
     )
 );
 
-// Optional: clear the working list until a category is picked
-Clear(colModuleCatItems_Working);
-Reset(cmbSelectCategory);
+// 5) Global diffs vs current active refs (no cat filter)
+ClearCollect(
+    colAdds,
+    Filter(colDesiredSel As d, CountIf(colRefActiveIds, id = d.id) = 0)
+);
 
-
-
-
-
-
-
-// Rebuild visible list – merge base state with pending overrides
-With(
-    { catText: If(IsBlank(cmbSelectCategory.Selected), Blank(), Text(cmbSelectCategory.Selected.Value)) },
-    If(
-        IsBlank(varSelectedModuleId) || IsBlank(catText),
-        Clear(colModuleCatItems_Working),
-        With(
-            {
-                catList:
-                    AddColumns(
-                        Filter(Skill_Matrix_CategoryItems, Text(Category) = catText),
-                        id, Text(CatItem_ID)
-                    )
-            },
-            ClearCollect(
-                colModuleCatItems_Working,
-                AddColumns(
-                    catList,
-                    IsSelectedForModule,
-                    With(
-                        {
-                            baseSel: CountIf(colRefActiveIds As r, r.id = id) > 0,
-                            pend:    LookUp(colPendingSel, CatItem_ID = CatItem_ID, IsSelected)
-                        },
-                        Coalesce(pend, baseSel)
-                    )
-                )
-            )
-        )
-    )
+ClearCollect(
+    colRemoves,
+    Filter(colRefActiveIds As a, CountIf(colDesiredSel, id = a.id) = 0)
 );
 
 
@@ -205,50 +119,14 @@ With(
 
 
 
-With(
-  {
-    baseSel: CountIf(colRefActiveIds, Text(CatItem_ID) = Text(ThisItem.CatItem_ID)) > 0,
-    pend:    LookUp(colPendingSel, CatItem_ID = ThisItem.CatItem_ID, IsSelected)
-  },
-  Coalesce(pend, baseSel)
-)
+
+
+
+
+Clear(colToggleLog);
 
 
 
 
 
 
-If(
-  IsBlank(LookUp(colPendingSel, CatItem_ID = ThisItem.CatItem_ID)),
-  Collect(colPendingSel, { CatItem_ID: ThisItem.CatItem_ID, IsSelected: true }),
-  UpdateIf(colPendingSel, CatItem_ID = ThisItem.CatItem_ID, { IsSelected: true })
-);
-
-
-
-
-
-
-If(
-  IsBlank(LookUp(colPendingSel, CatItem_ID = ThisItem.CatItem_ID)),
-  Collect(colPendingSel, { CatItem_ID: ThisItem.CatItem_ID, IsSelected: false }),
-  UpdateIf(colPendingSel, CatItem_ID = ThisItem.CatItem_ID, { IsSelected: false })
-);
-
-
-
-
-
-// seed from current truth so the UI defaults match the list
-ClearCollect(colRefActiveIds,
-    AddColumns(
-        ShowColumns(Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true), CatItem_ID),
-        id, Text(CatItem_ID)
-    )
-);
-ClearCollect(colPendingSel,
-    AddColumns(
-        ShowColumns(Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true), CatItem_ID),
-        IsSelected, true
-    )
-);
