@@ -176,6 +176,80 @@ If(
     )
 );
 
+// --- 9.1 Build Added/Removed RefID lists AFTER patches landed ---
+Set(
+    addedRefsText,
+    Concat(
+        Filter(
+            Skill_Matrix_Reference,
+            Mod_ID = varSelectedModuleId &&
+            IsActive = true &&
+            CountIf(colAdds, id = Text(CatItem_ID)) > 0
+        ),
+        Reference_ID,
+        ";"
+    )
+);
+Set(
+    removedRefsText,
+    Concat(
+        Filter(
+            Skill_Matrix_Reference,
+            Mod_ID = varSelectedModuleId &&
+            IsActive = false &&
+            CountIf(colRemoves, id = Text(CatItem_ID)) > 0
+        ),
+        Reference_ID,
+        ";"
+    )
+);
+
+// --- 9.2 Write Module delta Assignment if anything changed ---
+If(
+    varAddCount + varRemoveCount > 0,
+    Patch(
+        Skill_Matrix_Assignments,
+        Defaults(Skill_Matrix_Assignments),
+        {
+            Title: "EditMod-" & Text(Now(), "yyyymmdd-hhnnss"),
+            Operation: {
+                Value: If(
+                    varAddCount > 0 && varRemoveCount > 0,
+                    "ModCatItemAddRem",
+                    If(varAddCount > 0, "ModCatItemAdded", "ModCatItemRemoved")
+                )
+            },
+            Status: { Value: "Pending" },
+            Module_ID: varSelectedModuleId,
+            Module_Name: varSelectedModuleName,
+            Added_Reference_IDs: addedRefsText,
+            Removed_Reference_IDs: removedRefsText,
+            Added_Count: varAddCount,
+            Removed_Count: varRemoveCount,
+            RequestedAt: Now()
+        }
+    )
+);
+
+// --- 9.3 Write CatItem_Updated Assignment if any type edits happened ---
+If(
+    varUpdCount > 0,
+    Patch(
+        Skill_Matrix_Assignments,
+        Defaults(Skill_Matrix_Assignments),
+        {
+            Title: "EditCI-" & Text(Now(), "yyyymmdd-hhnnss"),
+            Operation: { Value: "CatItem_Updated" },
+            Status: { Value: "Pending" },
+            Module_ID: varSelectedModuleId,
+            Module_Name: varSelectedModuleName,
+            Updated_CatItem_IDs: Concat(colCI_Changed, CatItem_ID, ";"),
+            Updated_Count: varUpdCount,
+            RequestedAt: Now()
+        }
+    )
+);
+
 
 
 
