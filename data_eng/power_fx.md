@@ -1,13 +1,32 @@
+ClearCollect(
+    colRefActiveIds,
+    With(
+        {
+            src:
+                ShowColumns(
+                    Filter(
+                        Skill_Matrix_Reference,
+                        Mod_ID = varSelectedModuleId && IsActive = true
+                    ),
+                    "CatItem_ID"
+                )
+        },
+        // Distinct() coerces to a single 'Result' column and removes dupes
+        AddColumns(
+            Distinct(src, Text(CatItem_ID)),
+            id, Result
+        )
+    )
+);
+
+
+
+IsSelectedForModule,
 If(
-    IsBlank(LookUp(colToggleLog, id = ThisItem.id)),
-    Collect(colToggleLog, { id: ThisItem.id, Desired: true }),
-    UpdateIf(colToggleLog, id = ThisItem.id, { Desired: true })
+    IsBlank(id),
+    false,
+    CountIf(colRefActiveIds, id = id) > 0
 )
 
 
 
-If(
-    IsBlank(LookUp(colToggleLog, id = ThisItem.id)),
-    Collect(colToggleLog, { id: ThisItem.id, Desired: false }),
-    UpdateIf(colToggleLog, id = ThisItem.id, { Desired: false })
-)
