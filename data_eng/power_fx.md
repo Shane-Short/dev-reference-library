@@ -30,6 +30,14 @@ With({ cid: Text(ThisItem.CatItem_ID) },
 )
 
 
+ClearCollect(
+    colSkillEdits,
+    Table({ CatItem_ID: "", OldType: "", NewType: "" })
+);
+RemoveIf(colSkillEdits, true);
+
+
+
 
 With(
     {
