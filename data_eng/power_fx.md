@@ -1,26 +1,33 @@
-// Guard: must have a module picked first
-If(
-    IsBlank(varSelectedModuleId),
-    Notify("Pick a module first.", NotificationType.Warning),
-    /* ELSE */
-    ClearCollect(
-        colModuleCatItems_Working,
-        With(
-            {
-                selectedCat: Text(cmbSelectCategory.Selected.Value),
+// Cache robust category text once (handles Choice/Result/SelectedText)
+Set(
+    varSelectedCategoryText,
+    Text(
+        Coalesce(
+            cmbSelectCategory.Selected.Value,
+            cmbSelectCategory.Selected.Result,
+            cmbSelectCategory.SelectedText.Value
+        )
+    )
+);
 
-                // 1) Clean source rows for this category (fixed schema)
-                src: ShowColumns(
-                        Filter(
-                            Skill_Matrix_CategoryItems,
-                            Text(Category) = selectedCat
-                        ),
-                        "CatItem_ID", "Category", "Item", "Skill_Type"
-                    )
-            },
-            // 2) Build working list:
-            //    - id: normalized text key
-            //    - IsSelectedForModule: server truth overridden by any pending toggle
+// Require a module + category
+If(
+    IsBlank(varSelectedModuleId) || IsBlank(varSelectedCategoryText),
+    Notify("Pick a module and a category first.", NotificationType.Warning),
+    With(
+        {
+            // minimal, clean source set for the category
+            src: ShowColumns(
+                    Filter(
+                        Skill_Matrix_CategoryItems,
+                        Text(Category) = varSelectedCategoryText
+                    ),
+                    "CatItem_ID", "Category", "Item", "Skill_Type"
+                )
+        },
+        // Build the working rows: normalized id + selected flag
+        ClearCollect(
+            colModuleCatItems_Working,
             AddColumns(
                 src,
                 id, Text(CatItem_ID),
