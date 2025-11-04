@@ -1,61 +1,48 @@
-// Category picker OnChange
+// cache selected category text
+Set(varSelectedCategoryText, Text(cmbSelectCategory.Selected.Value));
 
-If(
-    IsBlank(varSelectedModuleId) || IsBlank(cmbSelectCategory.Selected),
-    Notify("Pick a module first, then a category.", NotificationType.Warning),
-
-    /* else */
-    Set(varSelectedCategoryText, Text(cmbSelectCategory.Selected.Value));
-
-    // (Assumes colRefActiveIds was built in Module picker OnChange.
-    // If you want this control to be self-sufficient, uncomment the next block.)
-    /*
-    ClearCollect(
-        colRefActiveIds,
-        AddColumns(
-            ShowColumns(
-                Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true),
-                CatItem_ID
+// 1) Build a clean ref-id list for THIS module only (one column: id as text)
+ClearCollect(
+    colRefActiveIds,
+    AddColumns(
+        Distinct(
+            Filter(
+                Skill_Matrix_Reference,
+                Mod_ID = varSelectedModuleId && IsActive = true
             ),
-            id, Text(CatItem_ID)
-        )
-    );
-    */
+            Text(CatItem_ID)   // Distinct over the text value
+        ),
+        id, Text(Coalesce(Result, Value)) // handle either 'Result' or 'Value'
+    )
+);
 
-    // Build the working list for the selected category
-    With(
-        {
-            src:
-                ShowColumns(
-                    Filter(
-                        Skill_Matrix_CategoryItems,
-                        Text(Category) = varSelectedCategoryText
-                    ),
-                    CatItem_ID, Category, Item, Skill_Type
-                )
-        },
-        ClearCollect(
-            colModuleCatItems_Working,
-            AddColumns(
-                // give each row a stable text id
-                AddColumns(src, id, Text(CatItem_ID)),
-                // final checkbox state = toggle override (if any) else active-ref membership
-                IsSelectedForModule,
-                    Coalesce(
-                        // IMPORTANT: qualify CatItem_ID with ThisRecord
-                        LookUp(
-                            colToggleLog,
-                            CatItem_ID = ThisRecord.CatItem_ID
-                        ).Desired,
-                        // membership in active refs for this module
-                        !IsBlank(
-                            LookUp(
-                                colRefActiveIds,
-                                id = ThisRecord.id
-                            )
-                        )
-                    )
+// 2) Build the category working set with a stable id and correct check state
+With(
+    {
+        src: ShowColumns(
+                Filter(
+                    Skill_Matrix_CategoryItems,
+                    Text(Category) = varSelectedCategoryText
+                ),
+                "CatItem_ID","Category","Item","Skill_Type"
             )
+    },
+    ClearCollect(
+        colModuleCatItems_Working,
+        AddColumns(
+            AddColumns(src, id, Text(CatItem_ID)),
+            IsSelectedForModule,
+                !IsBlank(
+                    LookUp(
+                        colRefActiveIds,
+                        id = ThisRecord.id
+                    )
+                )
         )
     )
 );
+
+
+
+
+
