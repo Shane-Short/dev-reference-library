@@ -1,29 +1,17 @@
+// Rebuild active CatItem IDs for this module (no Distinct/Result/Value shenanigans)
 ClearCollect(
     colRefActiveIds,
-    With(
-        {
-            src:
-                ShowColumns(
-                    Filter(
-                        Skill_Matrix_Reference,
-                        Mod_ID = varSelectedModuleId && IsActive = true
-                    ),
-                    CatItem_ID
-                ),
-            d: Distinct(
-                src,
-                Text(CatItem_ID)
-            )
-        },
-        // Distinct(...) returns a single column named Result in most cases,
-        // but you saw Value in your app. Coalesce handles both.
-        AddColumns(
-            d,
-            id, Text(Coalesce(Result, Value))
-        )
+    RenameColumns(
+        ShowColumns(
+            Filter(
+                Skill_Matrix_Reference,
+                Mod_ID = varSelectedModuleId && IsActive = true
+            ),
+            "CatItem_ID"
+        ),
+        "CatItem_ID", "id"   // => colRefActiveIds has a single column: id (Text)
     )
 );
-
 
 
 
