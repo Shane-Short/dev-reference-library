@@ -1,46 +1,61 @@
-// Snapshot ACTIVE refs for this module with a normalized 'id' column
-ClearCollect(
-    colRefActiveIds,
-    AddColumns(
-        ShowColumns(
-            Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true),
-            "CatItem_ID"
-        ),
-        id, Text(CatItem_ID)
-    )
-);
+// Category picker OnChange
 
+If(
+    IsBlank(varSelectedModuleId) || IsBlank(cmbSelectCategory.Selected),
+    Notify("Pick a module first, then a category.", NotificationType.Warning),
 
+    /* else */
+    Set(varSelectedCategoryText, Text(cmbSelectCategory.Selected.Value));
 
-
-With(
-    {
-        src: ShowColumns(
-                Filter(
-                    Skill_Matrix_CategoryItems,
-                    Text(Category) = varSelectedCategoryText
-                ),
-                "CatItem_ID", "Category", "Item", "Skill_Type"
-            )
-    },
+    // (Assumes colRefActiveIds was built in Module picker OnChange.
+    // If you want this control to be self-sufficient, uncomment the next block.)
+    /*
     ClearCollect(
-        colModuleCatItems_Working,
+        colRefActiveIds,
         AddColumns(
-            AddColumns(src, id, Text(CatItem_ID)),
-            IsSelectedForModule,
-                With(
-                    { tgl: LookUp(colToggleLog, CatItem_ID = CatItem_ID) },
-                    If(
-                        IsBlank(tgl),
-                        CountIf(colRefActiveIds, id = ThisRecord.id) > 0,
-                        tgl.Desired
-                    )
+            ShowColumns(
+                Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true),
+                CatItem_ID
+            ),
+            id, Text(CatItem_ID)
+        )
+    );
+    */
+
+    // Build the working list for the selected category
+    With(
+        {
+            src:
+                ShowColumns(
+                    Filter(
+                        Skill_Matrix_CategoryItems,
+                        Text(Category) = varSelectedCategoryText
+                    ),
+                    CatItem_ID, Category, Item, Skill_Type
                 )
+        },
+        ClearCollect(
+            colModuleCatItems_Working,
+            AddColumns(
+                // give each row a stable text id
+                AddColumns(src, id, Text(CatItem_ID)),
+                // final checkbox state = toggle override (if any) else active-ref membership
+                IsSelectedForModule,
+                    Coalesce(
+                        // IMPORTANT: qualify CatItem_ID with ThisRecord
+                        LookUp(
+                            colToggleLog,
+                            CatItem_ID = ThisRecord.CatItem_ID
+                        ).Desired,
+                        // membership in active refs for this module
+                        !IsBlank(
+                            LookUp(
+                                colRefActiveIds,
+                                id = ThisRecord.id
+                            )
+                        )
+                    )
+            )
         )
     )
 );
-
-
-"active=" & CountRows(colRefActiveIds) & "  first=" & If(CountRows(colModuleCatItems_Working)>0, First(colModuleCatItems_Working).id & ":" & Text(First(colModuleCatItems_Working).IsSelectedForModule), "—")
-
-
