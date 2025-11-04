@@ -1,27 +1,26 @@
-// Guard: must have a module first
+// Guard: must have a module picked first
 If(
     IsBlank(varSelectedModuleId),
     Notify("Pick a module first.", NotificationType.Warning),
-    
-    With(
-        {
-            catText: Text(cmbSelectCategory.Selected.Value),
+    /* ELSE */
+    ClearCollect(
+        colModuleCatItems_Working,
+        With(
+            {
+                selectedCat: Text(cmbSelectCategory.Selected.Value),
 
-            // 1) Source rows for this category, pre-shaped so columns are guaranteed
-            src: ShowColumns(
-                    Filter(
-                        Skill_Matrix_CategoryItems,
-                        Text(Category) = catText
-                    ),
-                    "CatItem_ID", "Category", "Item", "Skill_Type"
-                 )
-        },
-
-        // 2) Build the working list:
-        //    - id: normalized text key
-        //    - IsSelectedForModule: server truth (colRefActiveIds) overridden by any pending toggle (colToggleLog)
-        ClearCollect(
-            colModuleCatItems_Working,
+                // 1) Clean source rows for this category (fixed schema)
+                src: ShowColumns(
+                        Filter(
+                            Skill_Matrix_CategoryItems,
+                            Text(Category) = selectedCat
+                        ),
+                        "CatItem_ID", "Category", "Item", "Skill_Type"
+                    )
+            },
+            // 2) Build working list:
+            //    - id: normalized text key
+            //    - IsSelectedForModule: server truth overridden by any pending toggle
             AddColumns(
                 src,
                 id, Text(CatItem_ID),
@@ -37,20 +36,4 @@ If(
             )
         )
     )
-)
-
-
-
-ClearCollect(
-    colRefActiveIds,
-    AddColumns(
-        ShowColumns(
-            Filter(Skill_Matrix_Reference, Mod_ID = varSelectedModuleId && IsActive = true),
-            "CatItem_ID"
-        ),
-        id, Text(CatItem_ID)
-    )
 );
-
-
-
