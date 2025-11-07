@@ -3,12 +3,17 @@ if(
   "Team_Preset_ID eq '' and IsActive eq 1",
   concat(
     "(",
-    concat(
-      "Team_Preset_ID eq '",
+    "Team_Preset_ID eq '",
+    first(variables('varPresetIdsForAdds')),
+    "'",
+    if(
+      greater(length(variables('varPresetIdsForAdds')), 1),
       concat(
-        join(variables('varPresetIdsForAdds'), "' or Team_Preset_ID eq '"),
+        " or Team_Preset_ID eq '",
+        join(skip(variables('varPresetIdsForAdds'), 1), "' or Team_Preset_ID eq '"),
         "'"
-      )
+      ),
+      ''
     ),
     ") and IsActive eq 1"
   )
