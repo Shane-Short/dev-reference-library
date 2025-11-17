@@ -7,58 +7,69 @@ This design aligns with the SMART manufacturing vision, consolidates existing vi
 
 ⸻
 
-1. Data Model & Pipeline Architecture
+1. Data Model & Pipeline Architecture (Updated)
 
 1.1 Primary Fact Tables
 
 PM_All
 	•	Reliable source for CEID, ENTITY, Process Node, Part, PM type, wafer count prior to reset, PM reset dates.
-	•	This will serve as the primary event table for PM life calculations, PM classification, trend analysis, and chamber-level behavior.
+	•	Serves as the main event table for PM life calculations, PM classification, and chamber-level behavior.
 
 PM_Flex
-	•	Intel-supplied dataset containing maintenance thresholds, wafer deltas, downtime windows, PM reason classifications, and ROI fields.
-	•	To be joined to PM_All for deeper semantic insight.
-	•	Key fields used: Counter_Upper_Value, Median_Delta, Lower_IQR_Limit_Delta, Custom_Delta, Met_Upper_Limit, PM_Cycle_Utilization, reliable_upper_limit_insight, PM_Reason_Deepdive, WO_Description, Down_Window_Duration, PM_Duration, downtime_type/class/subclass, part_cost_per_pm, part_cost_saving_roi, mts_needed_laborhour_per_pm, etc.
+	•	Intel-supplied dataset containing maintenance thresholds, wafer deltas, downtime window classifications, reason detail, and ROI fields.
+	•	Will be joined to PM_All for semantic enrichment.
+	•	Key fields used include: Counter_Upper_Value, Median_Delta, Lower_IQR_Limit_Delta, Custom_Delta, PM_Reason_Deepdive, WO_Description, PM_Duration, downtime_type/class/subclass, and ROI metrics.
 
 Prod_WW_Output_ES (Wafers Out)
-	•	Provides production context by WW, CEID, ENTITY, and Process Node.
-	•	Used for normalizing downtime and PM rates.
-	•	If this table is not currently populated or reliable, we will need confirmation.
+	•	Provides wafer volume by WW, CEID, Entity, and Site.
+	•	Used to normalize downtime and PM behavior to production context.
+	•	Requires confirmation of completeness and availability.
 
 Prod_Tool_List_Output_ES
-	•	Used for mapping: CEID, site/fab, chamber type, process node.
-	•	Critical for all site and CEID-level visuals.
+	•	Critical for mapping CEID, Site, Chamber Type, and Process Node.
+	•	Will also be used to derive Altair (GTAca) vs Non-Altair classification.
 
 ⸻
 
-1.2 Reference & Dimension Tables
-	•	Tool/Chamber dimension (from Prod_Entity_Output_ES and Tool List).
-	•	Date dimension (WW, Year-Month, Calendar).
-	•	Part dimension (from PM_All + PM_Flex).
-	•	Process Node dimension (from PM_Flex + Tool List).
-	•	Cost tables (customer price + internal cost) – These do not exist yet and will require confirmation from the appropriate groups.
+1.2 Altair (GTAca) vs Non-Altair Classification (New Requirement)
 
-Once available, these will enable part cost analytics and warranty spend analysis.
+A dedicated classification field will be added to the model to differentiate between Altair (GTAca) and Non-Altair tools.
+	•	Derived from the 3-digit CEID (GTA) + the module designation (“CA”)
+	•	Exposed as a global slicer available on all relevant pages
+	•	Integrated into CEID and Site comparison analyses
+	•	Supports deeper part/PM behavior investigation driven by Altair differences
+	•	If any existing dataset already contains this field, we will use it; otherwise, this will be created in the transformation layer.
 
 ⸻
 
-1.3 Tables That May Be Deprecated or Limited Use
+1.3 Reference & Dimension Tables
+	•	Tool/Chamber dimension (from Prod_Entity_Output_ES + Tool List).
+	•	Date dimension (WW calendar).
+	•	Part dimension (from PM_All and PM_Flex).
+	•	Process Node dimension.
+	•	Part_Price_Customer (pending confirmation).
+	•	Part_Cost_Internal (pending confirmation).
+	•	These two cost tables are required for warranty and spend analytics and must be validated before development.
+
+⸻
+
+1.4 Candidate for Deprecation
 
 PM_Reset
-	•	PM_All currently appears to contain more reliable event-level details than PM_Reset.
-	•	We will validate whether PM_Reset contributes unique information; if not, it may be collapsed into PM_All logic.
+	•	Appears to offer less detail compared to PM_All.
+	•	Will be reviewed to confirm whether any unique fields require retention.
 
 ⸻
 
-1.4 Chronic Tool Definition (New)
+1.5 Chronic Tool Flag (New)
 
-Chambers will be algorithmically classified as “Chronic” based on:
-	•	Unscheduled PM count (e.g., last 26 weeks)
-	•	PM life variance relative to Median_Delta
+Algorithmically created metric based on:
+	•	Unscheduled PM volume
+	•	Variance of PM life vs Median_Delta
+	•	PM stability
 	•	Unscheduled downtime rate
-	•	Stability of PM intervals
 
-This will become a standardized metric for reliability conversations.
+Will be used for prioritization on the Chronic Tools page.
 
 ⸻
 
