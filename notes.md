@@ -1,350 +1,166 @@
--- CORRECTED Query 1
-SELECT TOP 10
-    pf.FACILITY,
-    pf.ENTITY,
-    pf.FACILITY + '_' + REPLACE(pf.ENTITY, '_PC', '_PM') AS temp_facility_entity,
-    ws.FAB_ENTITY,
-    ws.wafers_produced,
-    COUNT(*) AS pm_event_count
-FROM pm_flex_enriched pf
-INNER JOIN vw_Wafer_Summary_3yr ws
-    ON pf.FACILITY + '_' + REPLACE(pf.ENTITY, '_PC', '_PM') = ws.FAB_ENTITY
-    AND pf.YEARWW = ws.WW
-WHERE pf.YEARWW >= '2024WW01'
-GROUP BY pf.FACILITY, pf.ENTITY, ws.FAB_ENTITY, ws.wafers_produced
-ORDER BY ws.wafers_produced DESC;
+1. Executive Email You Can Send
 
+Subject: Proposal: Evaluation of Secure Enterprise-Grade AI Assistant for Engineering Productivity
 
--- CORRECTED Query 2
-SELECT TOP 20
-    ws.FAB_ENTITY,
-    ws.WW,
-    ws.wafers_produced,
-    ws.parts_replaced_count,
-    ws.max_part_count_this_week,
-    (SELECT MAX(Part_Count) 
-     FROM Prod_PM_all 
-     WHERE FAB_ENTITY = ws.FAB_ENTITY 
-       AND WW = ws.WW) AS raw_max_count
-FROM vw_Wafer_Summary_3yr ws
-WHERE ws.WW >= '2025WW40'  -- Last few weeks
-ORDER BY ws.wafers_produced DESC;
+Hi <Leader/Director>,
 
+As we continue to scale our data engineering output and support increasingly complex internal and customer-facing projects, I believe it is time for us to formally evaluate a secure, enterprise-grade AI assistant such as Claude for Business (or a comparable on-prem / VPC-isolated model).
 
+Teams across the industry are now seeing dramatic gains in productivity, documentation quality, and turnaround time by integrating AI—while still meeting strict data protection and IP requirements. Claude’s enterprise offering supports zero data retention, SOC 2 Type II compliance, VPC deployment, and on-prem or private cloud isolation, which aligns well with our internal security policies and customer IP obligations.
 
+I’d like to request permission to:
+	1.	Engage with our InfoSec + Data Utility team to assess the feasibility of a secure deployment.
+	2.	Open a vendor review to determine whether Claude’s enterprise solution—or any equivalent AI assistant—meets TEL’s standards for customer IP protection.
+	3.	Run a small internal pilot using synthetic or already publicly documented internal workflows to measure ROI, development acceleration, and collaboration benefits.
 
--- =============================================
--- Create Wafer Summary View (3-Year Retention) - CORRECTED
--- =============================================
--- PURPOSE: Aggregate wafer production data from Prod_PM_all
--- FIX: Prevents double-counting when multiple parts replaced in same period
--- Logic: MAX(Part_Count) per tool per week (not SUM across parts)
--- Database: Parts_Counter_Production
--- Author: Shane (Data Engineer)
--- Created: 2025-12-09
--- Updated: 2025-12-09 - Fixed double-counting issue
--- =============================================
+I’ve attached a high-level overview that outlines the business case, potential use cases, and security posture.
 
-USE Parts_Counter_Production;
-GO
+If approved, I can lead the initial evaluation, gather requirements from our engineering and compliance groups, and prepare a recommendation for leadership.
 
--- =============================================
--- Drop existing view if it exists
--- =============================================
-IF OBJECT_ID('dbo.vw_Wafer_Summary_3yr', 'V') IS NOT NULL
-BEGIN
-    PRINT 'Dropping existing view dbo.vw_Wafer_Summary_3yr...';
-    DROP VIEW dbo.vw_Wafer_Summary_3yr;
-    PRINT 'View dropped successfully.';
-END
-GO
+Thank you,
+Shane
+Data Engineering – ES
 
--- =============================================
--- Create Corrected View: vw_Wafer_Summary_3yr
--- =============================================
-PRINT 'Creating CORRECTED view dbo.vw_Wafer_Summary_3yr...';
-GO
+⸻
 
-CREATE VIEW dbo.vw_Wafer_Summary_3yr AS
-WITH WeeklyToolData AS (
-    -- =============================================
-    -- Step 1: Get max part count per tool per week
-    -- This represents total wafers processed by tool during that week
-    -- =============================================
-    SELECT 
-        FAB_ENTITY,
-        ENTITY,
-        CEID,
-        WW,
-        -- MAX part count = cumulative wafers through the tool
-        MAX(Part_Count) AS max_part_count_this_week,
-        -- Count how many parts were replaced this week
-        COUNT(DISTINCT Part) AS parts_replaced_count,
-        -- Most recent reset date this week
-        MAX(Reset_Date) AS last_reset_date,
-        -- First reset date this week (for reference)
-        MIN(Reset_Date) AS first_reset_date
-    FROM dbo.Prod_PM_all
-    WHERE 
-        -- Filter to last 3 years only
-        Reset_Date >= DATEADD(YEAR, -3, GETDATE())
-        -- Exclude NULL part counts
-        AND Part_Count IS NOT NULL
-        -- Exclude NULL work weeks
-        AND WW IS NOT NULL
-        -- Exclude NULL FAB_ENTITY (data quality issue)
-        AND FAB_ENTITY IS NOT NULL
-    GROUP BY FAB_ENTITY, ENTITY, CEID, WW
-),
-PreviousWeekData AS (
-    -- =============================================
-    -- Step 2: Get previous week's max part count
-    -- =============================================
-    SELECT 
-        FAB_ENTITY,
-        WW,
-        max_part_count_this_week,
-        -- Get previous week's part count for same tool
-        LAG(max_part_count_this_week, 1, 0) OVER (
-            PARTITION BY FAB_ENTITY 
-            ORDER BY WW
-        ) AS prev_week_max_count,
-        parts_replaced_count,
-        last_reset_date,
-        first_reset_date,
-        ENTITY,
-        CEID
-    FROM WeeklyToolData
-)
-SELECT 
-    -- =============================================
-    -- Step 3: Calculate wafers produced this week
-    -- =============================================
-    FAB_ENTITY,
-    ENTITY,
-    CEID,
-    WW,
-    
-    -- Wafers produced = current max - previous max
-    -- This avoids double-counting when multiple parts replaced
-    CASE 
-        WHEN max_part_count_this_week > prev_week_max_count 
-            THEN max_part_count_this_week - prev_week_max_count
-        WHEN max_part_count_this_week = prev_week_max_count 
-            THEN 0  -- No new wafers
-        ELSE 0  -- Handle counter resets (negative would indicate data issue)
-    END AS wafers_produced,
-    
-    -- How many parts were replaced this week
-    parts_replaced_count,
-    
-    -- Most recent reset date this week
-    last_reset_date,
-    
-    -- First reset date this week (for validation)
-    first_reset_date,
-    
-    -- Current cumulative part count
-    max_part_count_this_week,
-    
-    -- Previous week's cumulative part count (for debugging)
-    prev_week_max_count
+2. Argument Framework for Leadership + InfoSec
 
-FROM PreviousWeekData;
-GO
+Here are the points you’ll want to hit verbatim in conversation, because they match how highly regulated firms justify AI adoption.
 
--- =============================================
--- Verify view creation
--- =============================================
-IF OBJECT_ID('dbo.vw_Wafer_Summary_3yr', 'V') IS NOT NULL
-BEGIN
-    PRINT '';
-    PRINT '✓ CORRECTED view dbo.vw_Wafer_Summary_3yr created successfully!';
-    PRINT '';
-    
-    DECLARE @RowCount INT;
-    SELECT @RowCount = COUNT(*) FROM dbo.vw_Wafer_Summary_3yr;
-    PRINT 'Total rows in view: ' + CAST(@RowCount AS VARCHAR(20));
-    PRINT '';
-END
-ELSE
-BEGIN
-    PRINT '';
-    PRINT '✗ ERROR: View creation failed!';
-    PRINT '';
-END
-GO
+⸻
 
--- =============================================
--- Sample data with new logic
--- =============================================
-PRINT 'Sample data (top 20 rows by wafers_produced):';
-PRINT '------------------------------------------------------------';
+A. Why Tokyo Electron Needs an AI Assistant
 
-SELECT TOP 20
-    FAB_ENTITY,
-    ENTITY,
-    CEID,
-    WW,
-    wafers_produced,
-    parts_replaced_count,
-    max_part_count_this_week,
-    prev_week_max_count,
-    last_reset_date
-FROM dbo.vw_Wafer_Summary_3yr
-WHERE wafers_produced > 0  -- Only show weeks with production
-ORDER BY wafers_produced DESC;
-GO
+1. Our workload is scaling faster than headcount
+	•	Increasingly complex ETL pipelines (e.g., tool logs, warranty data, CRM integration)
+	•	Heavy documentation requirements (Power BI reports, design docs, status updates)
+	•	Cross-team dependencies (InfoSec, Data Utility, Operations, CS, FSE dashboards)
 
--- =============================================
--- Validation: Compare old vs new logic
--- =============================================
-PRINT '';
-PRINT 'Validation: Spot-check a tool with multiple part replacements';
-PRINT '------------------------------------------------------------';
+AI accelerates:
+	•	prototype creation,
+	•	code reviews,
+	•	data modeling,
+	•	doc writing,
+	•	SQL generation,
+	•	troubleshooting,
+	•	log interpretation.
 
--- Find a tool that had multiple parts replaced in one week
-SELECT TOP 1
-    FAB_ENTITY,
-    WW,
-    parts_replaced_count,
-    wafers_produced,
-    max_part_count_this_week,
-    prev_week_max_count
-FROM dbo.vw_Wafer_Summary_3yr
-WHERE parts_replaced_count > 1  -- Multiple parts replaced
-  AND wafers_produced > 0
-ORDER BY parts_replaced_count DESC;
-GO
+2. Competitors are already adopting enterprise AI
 
--- =============================================
--- Data quality checks
--- =============================================
-PRINT '';
-PRINT 'Data Quality Checks (CORRECTED):';
-PRINT '------------------------------------------------------------';
+Applied Materials, Lam Research, Intel, Samsung, Micron—all have internal AI initiatives.
+Engineering productivity and automation improvements are creating competitive gaps.
 
-SELECT 
-    'NULL FAB_ENTITY count' AS check_name,
-    COUNT(*) AS issue_count
-FROM dbo.vw_Wafer_Summary_3yr
-WHERE FAB_ENTITY IS NULL
+3. AI amplifies—not replaces—engineers
 
-UNION ALL
+It lets us:
+	•	reduce analysis cycles from days to hours,
+	•	generate prototypes 3–5× faster,
+	•	improve debugging accuracy,
+	•	standardize documentation across teams,
+	•	free engineers to focus on design rather than mechanics.
 
-SELECT 
-    'NULL WW count',
-    COUNT(*)
-FROM dbo.vw_Wafer_Summary_3yr
-WHERE WW IS NULL
+⸻
 
-UNION ALL
+B. How We Use It (Clear, Non-Threatening Use Cases)
 
-SELECT 
-    'Zero wafers produced count',
-    COUNT(*)
-FROM dbo.vw_Wafer_Summary_3yr
-WHERE wafers_produced = 0
+1. Faster ETL and pipeline development
+	•	Auto-generation of SQL, schema transformations, test cases
+	•	Snowflake + SQL Server integration patterns
+	•	Code cleanup, docstrings, unit tests
+	•	Log analysis and anomaly detection
+	•	Faster debugging of ingestion issues, edge cases, and joins
 
-UNION ALL
+2. Support for field service and tool analysis
+	•	Pattern recognition across sensor logs
+	•	Diagnosing common tool issues faster
+	•	Drafting instructions/playbooks for troubleshooting
+	•	Summaries for executives and non-technical users
 
-SELECT 
-    'Negative wafers produced count',
-    COUNT(*)
-FROM dbo.vw_Wafer_Summary_3yr
-WHERE wafers_produced < 0
+3. Documentation and communication
+	•	Design docs, technical guidance, onboarding materials
+	•	Clear explanations for non-engineers
+	•	Power BI descriptions, data dictionary generation
 
-UNION ALL
+4. Safe use with synthetic or scrubbed data
 
-SELECT 
-    'Unrealistic wafers (>100M per week)',
-    COUNT(*)
-FROM dbo.vw_Wafer_Summary_3yr
-WHERE wafers_produced > 100000000;  -- Flag suspiciously high values
+Even before approval for production datasets, we can use synthetic or anonymized structures to accelerate our work.
 
-GO
+⸻
 
--- =============================================
--- Summary statistics (CORRECTED)
--- =============================================
-PRINT '';
-PRINT 'Summary Statistics (CORRECTED LOGIC):';
-PRINT '------------------------------------------------------------';
+C. Security, Compliance, and Why This Is Actually Low-Risk
 
-SELECT 
-    'Wafer Production Stats' AS category,
-    MIN(wafers_produced) AS min_value,
-    MAX(wafers_produced) AS max_value,
-    AVG(wafers_produced) AS avg_value,
-    SUM(wafers_produced) AS total_value,
-    COUNT(*) AS row_count
-FROM dbo.vw_Wafer_Summary_3yr
+This is the part leadership cares about most.
 
-UNION ALL
+Claude Enterprise (or similar offerings) provides:
 
-SELECT 
-    'Parts Replaced Stats',
-    MIN(parts_replaced_count),
-    MAX(parts_replaced_count),
-    AVG(parts_replaced_count),
-    SUM(parts_replaced_count),
-    COUNT(*)
-FROM dbo.vw_Wafer_Summary_3yr;
+1. Zero Data Retention (ZDR)
 
-GO
+No training, no logging, no reuse of prompts in model training.
 
--- =============================================
--- Validation query: Compare to raw data
--- =============================================
-PRINT '';
-PRINT 'Validation Query: Compare view output to raw Prod_PM_all';
-PRINT '------------------------------------------------------------';
-PRINT 'Checking one tool across multiple weeks...';
+2. SOC 2 Type II + ISO 27001 compliance
 
--- Pick a tool and show how wafer counts progress week-by-week
-SELECT TOP 10
-    ws.FAB_ENTITY,
-    ws.WW,
-    ws.wafers_produced,
-    ws.max_part_count_this_week,
-    ws.prev_week_max_count,
-    ws.parts_replaced_count,
-    -- Calculate cumulative wafers over time
-    SUM(ws.wafers_produced) OVER (
-        PARTITION BY ws.FAB_ENTITY 
-        ORDER BY ws.WW 
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    ) AS cumulative_wafers
-FROM dbo.vw_Wafer_Summary_3yr ws
-WHERE ws.FAB_ENTITY = (
-    -- Pick the tool with most activity
-    SELECT TOP 1 FAB_ENTITY 
-    FROM dbo.vw_Wafer_Summary_3yr 
-    GROUP BY FAB_ENTITY 
-    ORDER BY SUM(wafers_produced) DESC
-)
-ORDER BY ws.WW DESC;
+Meets requirements already enforced for many TEL vendors.
 
-GO
+3. Private Cloud / VPC Isolation (optional)
 
-PRINT '';
-PRINT '====================================================================';
-PRINT 'CORRECTED View Creation Complete!';
-PRINT '====================================================================';
-PRINT '';
-PRINT 'KEY CHANGES FROM PREVIOUS VERSION:';
-PRINT '  - Uses MAX(Part_Count) per tool per week (not SUM across parts)';
-PRINT '  - Prevents double-counting when multiple parts replaced';
-PRINT '  - Calculates: current_max - previous_max = wafers this week';
-PRINT '';
-PRINT 'INTERPRETATION:';
-PRINT '  - wafers_produced = wafers processed THIS WEEK by this tool';
-PRINT '  - max_part_count_this_week = cumulative wafer count through tool';
-PRINT '  - parts_replaced_count = how many parts were replaced this week';
-PRINT '';
-PRINT 'Next Steps:';
-PRINT '  1. Compare results to previous version';
-PRINT '  2. Validate wafer counts make sense (should be lower/more accurate)';
-PRINT '  3. Run validation queries to spot-check accuracy';
-PRINT '';
-GO
+Can be deployed:
+	•	within a private VPC,
+	•	within a dedicated tenant,
+	•	or fully on-prem with GPU appliances.
+
+Meaning TEL controls:
+	•	networking
+	•	access
+	•	logging
+	•	encryption
+	•	user permissions.
+
+4. Role-based access controls & audit trails
+
+IT can track usage, restrict who can access what, and enforce policy.
+
+5. Automatic masking / filtering options
+
+Sensitive inputs can be masked or intercepted before reaching the model.
+
+6. Ability to implement TEL-approved data rules
+
+Such as:
+	•	No customer names
+	•	No unapproved logs
+	•	No tool-specific proprietary recipes
+	•	Only sanitized data flows
+
+7. Aligns with TEL’s preference for on-prem or controlled cloud
+
+AI vendors now expect these requirements and offer deployments that match our needs.
+
+⸻
+
+D. The Ask (What You Actually Request)
+
+You aren’t asking for “permission to use Claude.”
+You’re asking for a formal evaluation.
+
+What you request:
+	1.	A Vendor Security Review
+To compare Claude Enterprise with our data-security requirements.
+	2.	A Sandbox Pilot
+Small, zero-risk environment using:
+
+	•	synthetic data
+	•	test tables
+	•	pre-approved documentation
+	•	non-customer applications
+
+	3.	Cross-team input
+InfoSec, Legal, Data Utility, and leadership contribute requirements.
+	4.	A procurement path
+After evaluation, leadership decides between:
+
+	•	Claude on-prem
+	•	Claude private cloud
+	•	Claude VPC
+	•	or an internal LLM alternative
+
+This is the safest, least confrontational request.
