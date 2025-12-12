@@ -1,41 +1,146 @@
-FACILITY = 
-VAR OriginalFab = UPPER(Auto_Tool_List[Fab])
-VAR CleanFab = 
-    SWITCH(
-        TRUE(),
-        // D1D group (includes D1C, D1D, D1X, AFO, RP1)
-        OR(
-            CONTAINSSTRING(OriginalFab, "D1C"),
-            CONTAINSSTRING(OriginalFab, "D1D"),
-            CONTAINSSTRING(OriginalFab, "D1X"),
-            CONTAINSSTRING(OriginalFab, "AFO"),
-            CONTAINSSTRING(OriginalFab, "RP1")
-        ), "D1D",
-        
-        // F24 group (24, 34)
-        OR(
-            CONTAINSSTRING(OriginalFab, "24"),
-            CONTAINSSTRING(OriginalFab, "34")
-        ), "F24",
-        
-        // F28 group
-        CONTAINSSTRING(OriginalFab, "28"), "F28",
-        
-        // F32 group (12, 32, 42, 52)
-        OR(
-            CONTAINSSTRING(OriginalFab, "12"),
-            CONTAINSSTRING(OriginalFab, "32"),
-            CONTAINSSTRING(OriginalFab, "42"),
-            CONTAINSSTRING(OriginalFab, "52")
-        ), "F32",
-        
-        // F11 group
-        CONTAINSSTRING(OriginalFab, "11"), "F11",
-        
-        // Malaysia group
-        CONTAINSSTRING(OriginalFab, "MAL"), "MAL",
-        
-        // Fallback - keep original
-        OriginalFab
+4-Week Rolling PM Count = 
+VAR CurrentYearWW = MAX(pm_flex_enriched[YEARWW])
+VAR CurrentYear = VALUE(LEFT(CurrentYearWW, 4))
+VAR CurrentWeek = VALUE(RIGHT(CurrentYearWW, 2))
+RETURN
+    CALCULATE(
+        [Total PM Events],
+        FILTER(
+            ALL(pm_flex_enriched[YEARWW], pm_flex_enriched[ww_year], pm_flex_enriched[ww_number]),
+            VAR RowYear = pm_flex_enriched[ww_year]
+            VAR RowWeek = pm_flex_enriched[ww_number]
+            VAR WeekDiff = 
+                IF(
+                    RowYear = CurrentYear,
+                    CurrentWeek - RowWeek,
+                    IF(
+                        RowYear = CurrentYear - 1,
+                        52 + CurrentWeek - RowWeek,
+                        999
+                    )
+                )
+            RETURN WeekDiff >= 0 && WeekDiff <= 3
+        )
     )
-RETURN CleanFab
+
+
+
+
+
+4-Week Rolling Avg PM Life = 
+VAR CurrentYearWW = MAX(pm_flex_enriched[YEARWW])
+VAR CurrentYear = VALUE(LEFT(CurrentYearWW, 4))
+VAR CurrentWeek = VALUE(RIGHT(CurrentYearWW, 2))
+RETURN
+    CALCULATE(
+        [Average PM Life],
+        FILTER(
+            ALL(pm_flex_enriched[YEARWW], pm_flex_enriched[ww_year], pm_flex_enriched[ww_number]),
+            VAR RowYear = pm_flex_enriched[ww_year]
+            VAR RowWeek = pm_flex_enriched[ww_number]
+            VAR WeekDiff = 
+                IF(
+                    RowYear = CurrentYear,
+                    CurrentWeek - RowWeek,
+                    IF(
+                        RowYear = CurrentYear - 1,
+                        52 + CurrentWeek - RowWeek,
+                        999
+                    )
+                )
+            RETURN WeekDiff >= 0 && WeekDiff <= 3
+        )
+    )
+
+
+
+
+
+4-Week Rolling Downtime Hours = 
+VAR CurrentYearWW = MAX(pm_flex_enriched[YEARWW])
+VAR CurrentYear = VALUE(LEFT(CurrentYearWW, 4))
+VAR CurrentWeek = VALUE(RIGHT(CurrentYearWW, 2))
+RETURN
+    CALCULATE(
+        [Total Downtime Hours],
+        FILTER(
+            ALL(pm_flex_enriched[YEARWW], pm_flex_enriched[ww_year], pm_flex_enriched[ww_number]),
+            VAR RowYear = pm_flex_enriched[ww_year]
+            VAR RowWeek = pm_flex_enriched[ww_number]
+            VAR WeekDiff = 
+                IF(
+                    RowYear = CurrentYear,
+                    CurrentWeek - RowWeek,
+                    IF(
+                        RowYear = CurrentYear - 1,
+                        52 + CurrentWeek - RowWeek,
+                        999
+                    )
+                )
+            RETURN WeekDiff >= 0 && WeekDiff <= 3
+        )
+    )
+
+
+
+
+Chronic Tools % = 
+DIVIDE(
+    [Total Chronic Tools],
+    DISTINCTCOUNT(pm_flex_enriched[ENTITY]),
+    0
+)
+
+
+
+
+
+
+Average Chronic Score = AVERAGE(pm_flex_chronic_tools[chronic_score])
+
+
+
+
+
+
+Critical Chronic Tools = 
+CALCULATE(
+    COUNTROWS(pm_flex_chronic_tools),
+    pm_flex_chronic_tools[chronic_severity] = "Critical"
+)
+
+
+
+
+
+
+
+High Chronic Tools = 
+CALCULATE(
+    COUNTROWS(pm_flex_chronic_tools),
+    pm_flex_chronic_tools[chronic_severity] = "High"
+)
+
+
+
+
+
+Medium Chronic Tools = 
+CALCULATE(
+    COUNTROWS(pm_flex_chronic_tools),
+    pm_flex_chronic_tools[chronic_severity] = "Medium"
+)
+
+
+
+
+Low Chronic Tools = 
+CALCULATE(
+    COUNTROWS(pm_flex_chronic_tools),
+    pm_flex_chronic_tools[chronic_severity] = "Low"
+)
+
+
+
+
+Average Data Quality Score = AVERAGE(pm_flex_enriched[data_quality_score])
