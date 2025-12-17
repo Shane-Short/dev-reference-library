@@ -1,80 +1,50 @@
-Issue Summary
-
-A Power BI dataset failed to refresh in the Power BI Service (workspace), while the same report refreshed successfully in Power BI Desktop.
-The Service error reported a semantic model processing failure caused by a data type mismatch on the column:
-
-NOWDATA[MACHINE_EXIT_FACTORY_DATE]
-
-The error indicated Power BI Service was unable to convert a value from a string (VT_BSTR) to a date (VT_DATE), which caused the entire refresh to be cancelled.
-
-⸻
-
 Root Cause
 
-The column MACHINE_EXIT_FACTORY_DATE originates from Snowflake and contains values formatted as:
+The Power BI dataset failed to refresh in the Power BI Service due to a data type conversion error on the column MACHINE_EXIT_FACTORY_DATE.
 
-YYYY-MM-DD 00:00:00.000
+Although the values visually appeared to be valid dates, the source data from Snowflake contained datetime values formatted as YYYY-MM-DD 00:00:00.000. During refresh, Power BI Service attempted to force this column into a Date type via an automatic “Changed Type” step. If even a single row could not be converted cleanly, the Service aborted the semantic model processing.
 
-While these values visually resemble dates, they are effectively datetime strings or datetime values with a time component.
-
-In Power Query, an automatic “Changed Type” step was forcing this column to date.
-This worked in Power BI Desktop, but Power BI Service is stricter during semantic model processing:
-	•	If any row contains an empty value, unexpected text, or a value that cannot be converted cleanly to date,
-	•	the Service refresh fails entirely (even if most rows are valid).
-
-Desktop is more forgiving due to differences in locale handling, evaluation order, and query execution behavior.
+Power BI Desktop did not surface this issue due to differences in local execution, locale handling, and tolerance for type coercion, which masked the underlying data quality problem.
 
 ⸻
 
-Why Desktop Worked but Service Failed
-	•	Power BI Desktop uses a more tolerant local execution context.
-	•	Power BI Service enforces strict type validation during dataset refresh.
-	•	A single invalid or non-convertible value in a forced type conversion causes the Service refresh to fail.
-	•	This difference exposed a latent data quality / typing issue that Desktop did not surface.
+The reason:
+
+Power BI Service enforces stricter schema validation than Power BI Desktop.
+The auto-generated Changed Type step forced a hard conversion from text/datetime to date without accounting for nulls, blanks, or non-standard values. This caused the Service refresh to fail when encountering any row that did not meet strict date conversion rules, even though most rows were valid.
 
 ⸻
 
-Resolution Implemented
+What I Changed / Fix Implemented
 
-The fix was implemented in Power Query (Transform Data) to defensively sanitize the column before enforcing a data type.
+I removed the forced type conversion for MACHINE_EXIT_FACTORY_DATE from the existing Changed Type step and introduced a defensive transformation step earlier in Power Query.
 
-Key Changes
-	1.	Removed MACHINE_EXIT_FACTORY_DATE from the auto-generated Changed Type step.
-	2.	Added an explicit cleaning step that:
-	•	Converts values to text safely
+The new step:
+	•	Safely converts the value to text
 	•	Trims whitespace
-	•	Extracts the date portion (YYYY-MM-DD)
-	•	Uses try … otherwise null to prevent refresh failures
-	3.	Replaced the original column with the cleaned version and typed it as Date.
+	•	Extracts only the date portion (YYYY-MM-DD) from datetime values
+	•	Uses a fail-safe conversion that returns null instead of throwing an error
 
-Result
-	•	Invalid or unexpected values are converted to null instead of causing a failure.
-	•	The dataset refresh now succeeds consistently in Power BI Service.
-	•	Existing visuals, relationships, and measures were preserved (column name remained unchanged).
+After cleaning the data, the original column was replaced with the sanitized version and explicitly typed as a Date, ensuring compatibility with both Power BI Desktop and Power BI Service.
 
 ⸻
 
-Final Outcome
-	•	✅ Power BI Service refresh is stable and reliable
-	•	✅ No functional or visual regressions
-	•	✅ Root cause eliminated, not just masked
-	•	✅ Future data anomalies in this column will no longer break refreshes
+Result / Impact
+	•	Power BI Service refresh now completes successfully and consistently
+	•	The dataset is resilient to malformed or unexpected values in the date column
+	•	No report visuals, measures, or relationships were impacted
+	•	Eliminated a hidden failure mode that could recur with future data changes
+	•	Reduced operational risk and manual intervention
 
 ⸻
 
-Preventive Recommendation
+Why this is scalable
 
-For any date/datetime fields sourced from Snowflake or other warehouses:
-	•	Avoid relying solely on auto-generated Changed Type steps
-	•	Use explicit, defensive type conversion (try … otherwise null)
-	•	Treat Power BI Service as the source of truth for refresh validation, not Desktop
+This approach:
+	•	Prevents single-row data issues from breaking entire dataset refreshes
+	•	Works consistently across Desktop, Service, and gateway environments
+	•	Can be reused as a standard pattern for all date/datetime fields
+	•	Is resilient to upstream schema changes or data anomalies
+	•	Aligns with enterprise best practices for defensive data modeling
 
-Optionally, the logic can be moved upstream into Snowflake (casting to DATE) for even stronger guarantees.
-
-⸻
-
-Business Impact
-	•	Prevented ongoing refresh failures
-	•	Reduced operational risk
-	•	Improved robustness of enterprise reporting
-	•	Eliminated a class of future refresh outages tied to data quality
+This solution ensures long-term stability without relying on assumptions about data cleanliness or execution environment differences.
